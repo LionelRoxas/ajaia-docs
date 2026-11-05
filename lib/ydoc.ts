@@ -38,6 +38,8 @@ export function fromB64(s: string): Uint8Array {
 export function compactState(state: Uint8Array): { state: Uint8Array; json: JSONContent } {
   const doc = new Y.Doc({ gc: true })
   Y.applyUpdate(doc, state)
+  // Unresolved dependencies get parked, skipping integration and the root check.
+  if (doc.store.pendingStructs !== null || doc.store.pendingDs !== null) throw new Error('Update has missing dependencies')
   for (const name of doc.share.keys()) {
     if (name !== FRAGMENT) throw new Error('Unexpected root type')
   }

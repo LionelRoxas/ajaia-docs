@@ -158,4 +158,25 @@ describe('live', () => {
     const r = await saveLiveUpdate(repo, 'a', { id: D1, update: addParagraph(fromB64(o.value.ydoc), 'x'.repeat(2_100_000)) })
     expect(r).toMatchObject({ ok: false, error: 'invalid' })
   })
+  it('update with a missing dependency is invalid and leaves state unchanged', async () => {
+    const o = await openLiveDocument(repo, D1, 'a')
+    if (!o.ok) throw new Error('open')
+    const client = new Y.Doc()
+    Y.applyUpdate(client, fromB64(o.value.ydoc))
+    const frag = client.getXmlFragment('default')
+    const add = (t: string) => {
+      const p = new Y.XmlElement('paragraph')
+      p.insert(0, [new Y.XmlText(t)])
+      frag.insert(frag.length, [p])
+    }
+    add('one') // never saved
+    const sv = Y.encodeStateVector(client)
+    add('two')
+    const delta = toB64(Y.encodeStateAsUpdate(client, sv))
+    const before = await repo.getDocument(D1)
+    expect(await saveLiveUpdate(repo, 'a', { id: D1, update: delta })).toMatchObject({ ok: false, error: 'invalid' })
+    const after = await repo.getDocument(D1)
+    expect(after!.ydoc).toBe(before!.ydoc)
+    expect(after!.version).toBe(before!.version)
+  })
 })
