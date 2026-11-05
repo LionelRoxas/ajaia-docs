@@ -18,7 +18,7 @@ function contentTooBig(content: JSONContent): boolean {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-async function accessFor(repo: Repo, id: string, userId: string): Promise<{ doc: DocRow; role: Role } | null> {
+export async function accessFor(repo: Repo, id: string, userId: string): Promise<{ doc: DocRow; role: Role } | null> {
   if (!UUID_RE.test(id)) return null // non-UUID ids would make Postgres throw (22P02)
   const doc = await repo.getDocument(id)
   if (!doc) return null
