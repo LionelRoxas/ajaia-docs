@@ -3,3 +3,8 @@ export const DEMO_USERS: { email: string; name: string }[] = [
   { email: 'bob@demo.test', name: 'Bob' },
   { email: 'carol@demo.test', name: 'Carol' },
 ]
+
+export const TITLE_MAX = 200
+export const CONTENT_MAX_BYTES = 1_000_000
+export const UPLOAD_MAX_BYTES = 1_048_576
+export const DEFAULT_TITLE = 'Untitled document'
