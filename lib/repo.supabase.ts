@@ -62,6 +62,11 @@ export function supabaseRepo(db: SupabaseClient = createAdminClient()): Repo {
           .select('*').maybeSingle<DocRow>(),
       )
     },
+    async setYdocIfNull(id, ydoc) {
+      return check(
+        await db.from('documents').update({ ydoc }).eq('id', id).is('ydoc', null).select('*').maybeSingle<DocRow>(),
+      )
+    },
     async addShare(docId, userId) {
       check(await db.from('document_shares').upsert({ document_id: docId, user_id: userId }, { onConflict: 'document_id,user_id', ignoreDuplicates: true }))
     },

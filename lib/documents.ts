@@ -7,12 +7,12 @@ import type { DocRow, DocSummary, ErrorCode, Result, Role, SharedSummary } from 
 const fail = (error: ErrorCode, message: string) => ({ ok: false as const, error, message })
 const notFound = () => fail('not_found', 'Document not found')
 
-function normalizeTitle(raw: string): Result<string> {
+export function normalizeTitle(raw: string): Result<string> {
   const t = raw.trim() || DEFAULT_TITLE
   return t.length > TITLE_MAX ? fail('invalid', `Title must be ${TITLE_MAX} characters or fewer`) : { ok: true, value: t }
 }
 
-function contentTooBig(content: JSONContent): boolean {
+export function contentTooBig(content: JSONContent): boolean {
   return new TextEncoder().encode(JSON.stringify(content)).length > CONTENT_MAX_BYTES
 }
 

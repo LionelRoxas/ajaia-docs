@@ -12,7 +12,7 @@ const alice: Profile = { id: 'a', email: 'alice@demo.test', name: 'Alice' }
 const bob: Profile = { id: 'b', email: 'bob@demo.test', name: 'Bob' }
 const carol: Profile = { id: 'c', email: 'carol@demo.test', name: 'Carol' }
 const welcome: DocRow = {
-  id: D1, owner_id: 'a', title: 'Welcome', content: { type: 'doc', content: [{ type: 'paragraph' }] }, version: 1,
+  id: D1, owner_id: 'a', title: 'Welcome', content: { type: 'doc', content: [{ type: 'paragraph' }] }, ydoc: null, version: 1,
   created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
 }
 const seed = () => ({ profiles: [alice, bob, carol], docs: [{ ...welcome }], shares: [[D1, 'b']] as [string, string][] })

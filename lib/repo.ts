@@ -10,7 +10,8 @@ export interface Repo {
   listOwned(userId: string): Promise<DocSummary[]>
   listShared(userId: string): Promise<SharedSummary[]>
   insertDocument(ownerId: string, title: string, content: JSONContent): Promise<DocRow>
-  updateIfVersion(id: string, expectedVersion: number, patch: { title?: string; content?: JSONContent }): Promise<DocRow | null>
+  updateIfVersion(id: string, expectedVersion: number, patch: { title?: string; content?: JSONContent; ydoc?: string }): Promise<DocRow | null>
+  setYdocIfNull(id: string, ydoc: string): Promise<DocRow | null>
   addShare(docId: string, userId: string): Promise<void>
   removeShare(docId: string, userId: string): Promise<void>
 }

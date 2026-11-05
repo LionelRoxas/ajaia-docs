@@ -33,7 +33,7 @@ export function memoryRepo(seed: { profiles?: Profile[]; docs?: DocRow[]; shares
     },
     async insertDocument(ownerId, title, content: JSONContent) {
       const t = now()
-      const d: DocRow = { id: `mem-${++n}`, owner_id: ownerId, title, content, version: 1, created_at: t, updated_at: t }
+      const d: DocRow = { id: `mem-${++n}`, owner_id: ownerId, title, content, ydoc: null, version: 1, created_at: t, updated_at: t }
       d.content = structuredClone(content)
       docs.set(d.id, d)
       return structuredClone(d)
@@ -43,8 +43,15 @@ export function memoryRepo(seed: { profiles?: Profile[]; docs?: DocRow[]; shares
       if (!d || d.version !== expectedVersion) return null
       if (patch.title !== undefined) d.title = patch.title
       if (patch.content !== undefined) d.content = structuredClone(patch.content)
+      if (patch.ydoc !== undefined) d.ydoc = patch.ydoc
       d.version = expectedVersion + 1
       d.updated_at = now()
+      return structuredClone(d)
+    },
+    async setYdocIfNull(id, ydoc) {
+      const d = docs.get(id)
+      if (!d || d.ydoc !== null) return null
+      d.ydoc = ydoc
       return structuredClone(d)
     },
     async addShare(docId, userId) { shares.add(`${docId}|${userId}`) },
