@@ -64,3 +64,30 @@ body {
 .doc-body hr { border: 0; border-top: 1px solid var(--line); margin: 1.5em 0; }
 .doc-body ::selection { background: color-mix(in srgb, var(--accent) 20%, transparent); }
 .doc-body[contenteditable='false'] { color: var(--muted); }
+
+/* Collaborator carets (CollaborationCaret): a thin colored bar with the person's name above it. */
+.collaboration-carets__caret {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 1px solid;
+  border-right: 1px solid;
+  word-break: normal;
+  pointer-events: none;
+}
+.collaboration-carets__label {
+  position: absolute;
+  top: -1.45em;
+  left: -1px;
+  padding: 0.1rem 0.375rem;
+  border-radius: 4px 4px 4px 0;
+  font-family: var(--font-ui), system-ui, sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  font-style: normal;
+  line-height: 1.4;
+  letter-spacing: 0;
+  color: #fff;
+  white-space: nowrap;
+  user-select: none;
+}

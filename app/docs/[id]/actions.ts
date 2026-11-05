@@ -1,24 +1,25 @@
 'use server'
 
-import type { JSONContent } from '@tiptap/core'
 import { getUser } from '@/lib/auth'
 import { supabaseRepo } from '@/lib/repo'
-import { saveDocument } from '@/lib/documents'
+import { saveLiveUpdate, saveTitle } from '@/lib/live'
 import { listSharesFor, shareDocument, unshareDocument } from '@/lib/sharing'
 import type { Profile, Result } from '@/lib/types'
 
-export async function saveDocumentAction(input: {
-  id: string
-  version: number
-  title?: string
-  content?: JSONContent
-}): Promise<Result<{ version: number }>> {
+const SESSION_EXPIRED = { ok: false as const, error: 'unauthorized' as const, message: 'Your session expired. Sign in again.' }
+
+/** Merges a base64 Yjs update into the stored document state. */
+export async function saveLiveUpdateAction(input: { id: string; update: string }): Promise<Result<{ version: number }>> {
   const user = await getUser()
-  if (!user) return { ok: false, error: 'unauthorized', message: 'Your session expired. Sign in again.' }
-  return saveDocument(supabaseRepo(), user.id, input)
+  if (!user) return SESSION_EXPIRED
+  return saveLiveUpdate(supabaseRepo(), user.id, input)
 }
 
-const SESSION_EXPIRED = { ok: false as const, error: 'unauthorized' as const, message: 'Your session expired. Sign in again.' }
+export async function saveTitleAction(input: { id: string; title: string }): Promise<Result<{ title: string }>> {
+  const user = await getUser()
+  if (!user) return SESSION_EXPIRED
+  return saveTitle(supabaseRepo(), user.id, input)
+}
 
 export async function shareAction(docId: string, email: string): Promise<Result<Profile>> {
   const user = await getUser()

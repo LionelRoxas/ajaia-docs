@@ -1,151 +1,187 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useEffect, useRef, useState, useTransition, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
-import type { JSONContent } from '@tiptap/core'
-import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
-import { editorExtensions } from '@/lib/editor-extensions'
-import { CONTENT_MAX_BYTES, DEFAULT_TITLE, TITLE_MAX } from '@/lib/limits'
+import Collaboration from '@tiptap/extension-collaboration'
+import CollaborationCaret from '@tiptap/extension-collaboration-caret'
+import * as Y from 'yjs'
+import { Awareness } from 'y-protocols/awareness'
+import { liveEditorExtensions } from '@/lib/editor-extensions'
+import { DEFAULT_TITLE, TITLE_MAX } from '@/lib/limits'
+import { FRAGMENT, fromB64 } from '@/lib/ydoc'
+import { createLiveProvider, supabaseLiveChannel, type LiveProvider } from '@/lib/live-provider'
 import {
-  CONFLICT_MESSAGE,
   NO_ACCESS_MESSAGE,
   SESSION_EXPIRED_MESSAGE,
-  createSaveQueue,
-  type Patch,
-  type SaveQueue,
+  createLiveSaver,
+  type LiveSaver,
   type Status,
-} from '@/lib/save-queue'
-import { saveDocumentAction } from '@/app/docs/[id]/actions'
+} from '@/lib/live-save'
+import { createBrowserSupabase } from '@/lib/supabase/browser'
+import { saveLiveUpdateAction, saveTitleAction } from '@/app/docs/[id]/actions'
 import Toolbar from './Toolbar'
 import SaveStatus from './SaveStatus'
 import SharePanel from './SharePanel'
+import Presence from './Presence'
 
-const DEBOUNCE_MS = 1000
-const tooLarge = (c: JSONContent) => new TextEncoder().encode(JSON.stringify(c)).length > CONTENT_MAX_BYTES
-// After these the queue sends nothing more, so the editor goes read-only.
-const isStopped = (s: Status, m?: string) =>
-  s === 'conflict' || (s === 'error' && (m === NO_ACCESS_MESSAGE || m === SESSION_EXPIRED_MESSAGE))
+// Caret colors: distinct, and dark enough for the white name label.
+const COLORS = ['#2453d6', '#c0362c', '#0f7b6c', '#8a4bd6', '#b45309', '#be185d', '#0369a1', '#4d7c0f']
+function colorFor(userId: string): string {
+  let h = 0
+  for (let i = 0; i < userId.length; i++) h = (h * 31 + userId.charCodeAt(i)) >>> 0
+  return COLORS[h % COLORS.length]
+}
+
+// After these nothing more will save, so the editor goes read-only.
+const isStopMessage = (m?: string) => m === NO_ACCESS_MESSAGE || m === SESSION_EXPIRED_MESSAGE
+
+type Session = { ydoc: Y.Doc; provider: LiveProvider; saver: LiveSaver }
 
 type Props = {
   id: string
-  version: number
+  ydoc: string // base64 Yjs state from the server
   title: string
-  content: JSONContent
   isOwner: boolean
   ownerName: string
-  userEmail: string
+  user: { id: string; name: string; email: string }
 }
 
-export default function DocEditor({ id, version, title: initialTitle, content, isOwner, ownerName, userEmail }: Props) {
-  const router = useRouter()
+export default function DocEditor({ id, ydoc: serverState, title: initialTitle, isOwner, ownerName, user }: Props) {
   const [status, setStatus] = useState<Status>('idle')
   const [message, setMessage] = useState<string>()
+  const [stopped, setStopped] = useState(false)
+  const [peers, setPeers] = useState<string[]>([])
   const [title, setTitle] = useState(initialTitle)
-  const [copied, setCopied] = useState<'ok' | 'failed' | null>(null)
-  const [reloading, startReload] = useTransition()
+  const [session, setSession] = useState<Session | null>(null)
+  const [initialState] = useState(serverState) // later props never replace the live document
   const savedTitle = useRef(initialTitle)
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const latestDoc = useRef<ProseMirrorNode | null>(null) // immutable snapshot; still readable after the editor is destroyed
-  const unsaved = useRef(false) // a change was handed to the queue and not yet confirmed
-  const halted = useRef(false) // conflict or lost access: nothing more will save
+  const titleFocused = useRef(false)
+  const titleSaving = useRef(false)
+  const sessionRef = useRef<Session | null>(null)
 
-  const queue = useRef<SaveQueue | null>(null)
-  // Created once on mount (not during render) so its callbacks may touch refs.
-  useEffect(() => {
-    queue.current ??= createSaveQueue({
-      initialVersion: version,
-      // Oversize content is rejected locally so it never hits the request body limit.
-      send: async (patch, v) =>
-        patch.content && tooLarge(patch.content)
-          ? { ok: false, error: 'invalid', message: 'Document is too large' }
-          : saveDocumentAction({ id, version: v, ...patch }),
-      onStatus: (s, m) => {
-        if (isStopped(s, m)) halted.current = true
-        if (s === 'saved') {
-          unsaved.current = false
-          if (timer.current) return // newer typing is still waiting for its debounce: stay on "Saving…"
-        }
-        setStatus(s)
-        setMessage(m)
-      },
-    })
-  }, [id, version])
-  const push = (patch: Patch) => {
-    unsaved.current = true
-    queue.current?.push(patch)
+  const report = (s: Status, m?: string) => {
+    if (s === 'error' && isStopMessage(m)) setStopped(true)
+    setStatus(s)
+    setMessage(m)
   }
-
-  const editor = useEditor({
-    extensions: editorExtensions,
-    content,
-    immediatelyRender: false,
-    editorProps: {
-      attributes: { class: 'doc-body', 'aria-label': 'Document body' },
-    },
-    onUpdate: ({ editor: e }) => {
-      if (halted.current) return
-      setStatus('saving')
-      setMessage(undefined)
-      latestDoc.current = e.state.doc
-      if (timer.current) clearTimeout(timer.current)
-      timer.current = setTimeout(flushNow, DEBOUNCE_MS)
-    },
+  const reportRef = useRef(report)
+  useEffect(() => {
+    reportRef.current = report
   })
 
-  // Send the pending debounced edit now (on debounce, Back link, and unmount via client navigation),
-  // and resend anything the queue kept after a failed request.
-  function flushNow() {
-    if (timer.current && latestDoc.current) {
-      clearTimeout(timer.current)
-      timer.current = null
-      push({ content: latestDoc.current.toJSON() })
-    }
-    void queue.current?.flush()
-  }
-  useEffect(() => () => flushNow(), []) // eslint-disable-line react-hooks/exhaustive-deps -- refs only
-
-  const readOnly = isStopped(status, message)
+  // One live session per mount: Y.Doc from the server state, Realtime relay, and the save loop.
   useEffect(() => {
-    if (readOnly) editor?.setEditable(false)
-  }, [readOnly, editor])
+    const ydoc = new Y.Doc()
+    Y.applyUpdate(ydoc, fromB64(initialState))
+    const awareness = new Awareness(ydoc)
+    const channel = supabaseLiveChannel(createBrowserSupabase(), id)
+    channel.on('title', (p) => {
+      if (typeof p.t !== 'string' || titleFocused.current) return
+      const t = p.t.slice(0, TITLE_MAX)
+      savedTitle.current = t
+      setTitle(t)
+    })
+    const provider = createLiveProvider({ channel, ydoc, awareness, onPeers: (names) => setPeers(names.filter((n) => n !== user.name)) })
+    const saver = createLiveSaver({
+      ydoc,
+      isRemote: (o) => o === provider.origin,
+      send: (update) => saveLiveUpdateAction({ id, update }),
+      onStatus: (s, m) => reportRef.current(s, m),
+    })
+    const s = { ydoc, provider, saver }
+    sessionRef.current = s
+    setSession(s) // the editor is built on this session
+    return () => {
+      void saver.flush() // client navigation away: send what's left (the request outlives the unmount)
+      saver.destroy()
+      provider.destroy()
+      awareness.destroy()
+      if (sessionRef.current === s) sessionRef.current = null
+    }
+  }, [id, initialState, user.name])
+
+  const editor = useEditor(
+    {
+      extensions: session
+        ? [
+            ...liveEditorExtensions,
+            Collaboration.configure({ document: session.ydoc, field: FRAGMENT }),
+            CollaborationCaret.configure({ provider: session.provider, user: { name: user.name, color: colorFor(user.id) } }),
+          ]
+        : liveEditorExtensions,
+      // No `content`: the Y.Doc is the content.
+      editable: !!session,
+      immediatelyRender: false,
+      editorProps: {
+        attributes: { class: 'doc-body', 'aria-label': 'Document body' },
+      },
+    },
+    [session],
+  )
+
+  // Lost access or session: freeze the editor and leave the channel.
+  useEffect(() => {
+    if (!stopped) return
+    editor?.setEditable(false)
+    sessionRef.current?.provider.destroy()
+    setPeers([]) // eslint-disable-line react-hooks/set-state-in-effect -- nobody is shown once we've left
+  }, [stopped, editor])
 
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
-      if (!unsaved.current && !timer.current) return
+      if (!sessionRef.current?.saver.hasUnsaved() && !titleSaving.current) return
       e.preventDefault()
       e.returnValue = '' // older browsers need this to show the prompt
     }
+    // Tab hidden (often right before closing): send pending edits while the page can still fetch.
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') void sessionRef.current?.saver.flush()
+    }
     window.addEventListener('beforeunload', warn)
-    return () => window.removeEventListener('beforeunload', warn)
+    document.addEventListener('visibilitychange', onHide)
+    return () => {
+      window.removeEventListener('beforeunload', warn)
+      document.removeEventListener('visibilitychange', onHide)
+    }
   }, [])
 
-  const saveTitle = () => {
+  const saveTitle = async () => {
+    titleFocused.current = false
     const next = title.trim() || DEFAULT_TITLE
     if (next !== title) setTitle(next)
-    if (next === savedTitle.current || halted.current) return
+    if (next === savedTitle.current || stopped) return
     savedTitle.current = next
-    push({ title: next })
+    titleSaving.current = true
+    report('saving')
+    let res: Awaited<ReturnType<typeof saveTitleAction>>
+    try {
+      res = await saveTitleAction({ id, title: next })
+    } catch {
+      res = { ok: false, error: 'invalid', message: "Couldn't save. Check your connection." }
+    }
+    titleSaving.current = false
+    if (res.ok) {
+      sessionRef.current?.provider.send('title', { t: res.value.title })
+      if (!sessionRef.current?.saver.hasUnsaved()) report('saved')
+      return
+    }
+    if (res.error === 'not_found' || res.error === 'forbidden') report('error', NO_ACCESS_MESSAGE)
+    else if (res.error === 'unauthorized') report('error', SESSION_EXPIRED_MESSAGE)
+    else {
+      savedTitle.current = '' // let the next blur retry
+      report('error', res.message)
+    }
   }
 
   const onTitleKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter') return
     e.preventDefault()
-    editor?.commands.focus('start')
+    editor?.commands.focus('start') // blurs the title, which saves it
   }
 
-  const copyText = async () => {
-    if (!editor) return
-    try {
-      await navigator.clipboard.writeText(editor.getText())
-      setCopied('ok')
-    } catch {
-      setCopied('failed')
-    }
-  }
-
-  const conflict = status === 'conflict'
+  const flushNow = () => void sessionRef.current?.saver.flush()
+  const readOnly = stopped || !session
 
   return (
     <main className="flex flex-1 flex-col">
@@ -165,11 +201,14 @@ export default function DocEditor({ id, version, title: initialTitle, content, i
           <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none]">
             <Toolbar editor={editor} disabled={readOnly} />
           </div>
+          <div className="hidden min-w-0 max-w-[12rem] sm:block">
+            <Presence names={peers} />
+          </div>
           <div className="hidden min-w-0 max-w-[16rem] sm:block">
             <SaveStatus status={status} message={message} />
           </div>
           {isOwner ? (
-            <SharePanel docId={id} currentEmail={userEmail} />
+            <SharePanel docId={id} currentEmail={user.email} />
           ) : (
             <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 text-xs text-muted">Shared by {ownerName}</span>
           )}
@@ -177,53 +216,26 @@ export default function DocEditor({ id, version, title: initialTitle, content, i
       </div>
 
       <div className="px-3 py-6 sm:px-6 sm:py-10">
-        <div className="mx-auto mb-3 max-w-[50rem] sm:hidden">
+        <div className="mx-auto mb-3 flex max-w-[50rem] flex-wrap items-baseline justify-between gap-x-4 gap-y-1 sm:hidden">
           <SaveStatus status={status} message={message} />
+          <Presence names={peers} />
         </div>
-
-        {conflict && (
-          <div
-            role="alert"
-            className="mx-auto mb-4 flex max-w-[50rem] flex-wrap items-center gap-x-4 gap-y-3 rounded-lg border border-danger/30 bg-danger/[0.05] px-4 py-3"
-          >
-            <div className="min-w-0 flex-1 text-sm">
-              <p className="text-ink">{CONFLICT_MESSAGE}</p>
-              {copied === 'failed' && <p className="mt-1 text-danger">Couldn&apos;t copy. Select the text and copy it manually.</p>}
-            </div>
-            <div className="flex shrink-0 gap-2">
-              <button
-                type="button"
-                onClick={copyText}
-                className="rounded-md border border-line bg-paper px-3 py-1.5 text-sm font-medium hover:bg-canvas"
-              >
-                {copied === 'ok' ? 'Copied' : 'Copy my text'}
-              </button>
-              <button
-                type="button"
-                disabled={reloading}
-                onClick={() => startReload(() => router.refresh())}
-                className="rounded-md border border-line bg-paper px-3 py-1.5 text-sm font-medium hover:bg-canvas disabled:opacity-50"
-              >
-                Reload latest
-              </button>
-            </div>
-          </div>
-        )}
 
         <article className="mx-auto min-h-[70vh] max-w-[50rem] rounded-sm border border-line bg-paper px-6 py-10 sm:px-16 sm:py-14">
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            onFocus={() => (titleFocused.current = true)}
             onBlur={saveTitle}
             onKeyDown={onTitleKey}
             maxLength={TITLE_MAX}
-            readOnly={readOnly}
+            readOnly={stopped}
             placeholder={DEFAULT_TITLE}
             aria-label="Title"
             className="w-full bg-transparent font-serif text-[2rem] font-semibold leading-tight tracking-[-0.01em] text-ink placeholder:text-muted/60 read-only:text-muted focus:outline-none"
           />
           <div className="mt-6">
-            <EditorContent editor={editor} />
+            <EditorContent editor={session ? editor : null} />
           </div>
         </article>
       </div>

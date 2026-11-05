@@ -1,5 +1,5 @@
 import type { JSONContent } from '@tiptap/core'
-import { canEdit, roleFor } from './access'
+import { roleFor } from './access'
 import { CONTENT_MAX_BYTES, DEFAULT_TITLE, TITLE_MAX } from './limits'
 import type { Repo } from './repo'
 import type { DocRow, DocSummary, ErrorCode, Result, Role, SharedSummary } from './types'
@@ -44,26 +44,4 @@ export async function createDocument(repo: Repo, userId: string, input: { title?
   const content = input.content ?? { type: 'doc', content: [{ type: 'paragraph' }] }
   if (contentTooBig(content)) return fail('invalid', 'Document is too large')
   return { ok: true, value: await repo.insertDocument(userId, title.value, content) }
-}
-
-export async function saveDocument(
-  repo: Repo,
-  userId: string,
-  input: { id: string; version: number; title?: string; content?: JSONContent },
-): Promise<Result<{ version: number }>> {
-  const patch: { title?: string; content?: JSONContent } = {}
-  if (input.title !== undefined) {
-    const t = normalizeTitle(input.title)
-    if (!t.ok) return t
-    patch.title = t.value
-  }
-  if (input.content !== undefined) {
-    if (contentTooBig(input.content)) return fail('invalid', 'Document is too large')
-    patch.content = input.content
-  }
-  const a = await accessFor(repo, input.id, userId)
-  if (!a || !canEdit(a.role)) return notFound()
-  const updated = await repo.updateIfVersion(input.id, input.version, patch)
-  if (!updated) return fail('conflict', 'This document was changed by someone else. Reload to get the latest.')
-  return { ok: true, value: { version: updated.version } }
 }
