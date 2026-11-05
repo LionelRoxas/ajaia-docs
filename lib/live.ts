@@ -3,9 +3,12 @@ import { canEdit } from './access'
 import { accessFor, contentTooBig, normalizeTitle } from './documents'
 import type { Repo } from './repo'
 import type { DocRow, ErrorCode, Result, Role } from './types'
-import { fromB64, jsonToYState, mergeStates, toB64, yStateToJson } from './ydoc'
+import { YDOC_MAX_BYTES } from './limits'
+import { compactState, fromB64, jsonToYState, mergeStates, toB64 } from './ydoc'
 
 const fail = (error: ErrorCode, message: string) => ({ ok: false as const, error, message })
+const TOO_BIG = 'Document is too large'
+const CONFLICT_MSG = 'This document was changed by someone else. Reload to get the latest.'
 const notFound = () => fail('not_found', 'Document not found')
 
 export async function openLiveDocument(
@@ -36,20 +39,19 @@ export async function saveLiveUpdate(
   } catch {
     return fail('invalid', 'Malformed update')
   }
+  if (incoming.length > YDOC_MAX_BYTES) return fail('invalid', TOO_BIG)
   for (let attempt = 0; attempt < 3; attempt++) {
     const a = await accessFor(repo, input.id, userId)
     if (!a || !canEdit(a.role)) return notFound()
-    let merged: Uint8Array
-    let content
+    if (a.doc.ydoc === null) return fail('conflict', CONFLICT_MSG) // client must open first
+    let compact
     try {
-      const stored = a.doc.ydoc ?? toB64(jsonToYState(a.doc.content))
-      merged = mergeStates([fromB64(stored), incoming])
-      content = yStateToJson(merged)
+      compact = compactState(mergeStates([fromB64(a.doc.ydoc), incoming]))
     } catch {
       return fail('invalid', 'Malformed update')
     }
-    if (contentTooBig(content)) return fail('invalid', 'Document is too large')
-    const updated = await repo.updateIfVersion(input.id, a.doc.version, { content, ydoc: toB64(merged) })
+    if (compact.state.length > YDOC_MAX_BYTES || contentTooBig(compact.json)) return fail('invalid', TOO_BIG)
+    const updated = await repo.updateIfVersion(input.id, a.doc.version, { content: compact.json, ydoc: toB64(compact.state) })
     if (updated) return { ok: true, value: { version: updated.version } }
   }
   return fail('conflict', 'Could not save right now. Try again.')

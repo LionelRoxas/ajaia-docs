@@ -4,7 +4,7 @@ import { memoryRepo } from '@/lib/repo.memory'
 import type { Repo } from '@/lib/repo'
 import type { DocRow, Profile } from '@/lib/types'
 import { openLiveDocument, saveLiveUpdate, saveTitle } from '@/lib/live'
-import { fromB64, toB64 } from '@/lib/ydoc'
+import { fromB64, jsonToYState, toB64 } from '@/lib/ydoc'
 
 const D1 = '00000000-0000-4000-8000-000000000001'
 const alice: Profile = { id: 'a', email: 'alice@demo.test', name: 'Alice' }
@@ -54,9 +54,9 @@ describe('live', () => {
     expect(await saveLiveUpdate(repo, 'a', { id: D1, update: addParagraph(base, 'AAA') })).toMatchObject({ ok: true })
     expect(await saveLiveUpdate(repo, 'b', { id: D1, update: addParagraph(base, 'BBB') })).toMatchObject({ ok: true })
     const s = JSON.stringify((await repo.getDocument(D1))!.content)
-    expect(s).toContain('AAA')
-    expect(s).toContain('BBB')
-    expect(s).toContain('hi')
+    expect(s.match(/AAA/g)).toHaveLength(1)
+    expect(s.match(/BBB/g)).toHaveLength(1)
+    expect(s.match(/hi/g)).toHaveLength(1)
   })
   it('stranger cannot save', async () => {
     const o = await openLiveDocument(repo, D1, 'a')
@@ -89,5 +89,73 @@ describe('live', () => {
   })
   it('saveTitle stranger not_found', async () => {
     expect(await saveTitle(repo, 'c', { id: D1, title: 'x' })).toMatchObject({ ok: false, error: 'not_found' })
+  })
+  it('malformed update is invalid', async () => {
+    await openLiveDocument(repo, D1, 'a')
+    expect(await saveLiveUpdate(repo, 'a', { id: D1, update: 'AAAA' })).toMatchObject({ ok: false, error: 'invalid' })
+    expect(await saveLiveUpdate(repo, 'a', { id: D1, update: '!!!not base64' })).toMatchObject({ ok: false, error: 'invalid' })
+  })
+  it('re-sending the same update is idempotent', async () => {
+    const o = await openLiveDocument(repo, D1, 'a')
+    if (!o.ok) throw new Error('open')
+    const u = addParagraph(fromB64(o.value.ydoc), 'AAA')
+    await saveLiveUpdate(repo, 'a', { id: D1, update: u })
+    const once = JSON.stringify((await repo.getDocument(D1))!.content)
+    expect(await saveLiveUpdate(repo, 'a', { id: D1, update: u })).toMatchObject({ ok: true })
+    expect(JSON.stringify((await repo.getDocument(D1))!.content)).toBe(once)
+  })
+  it('setYdocIfNull race loser re-reads the winner', async () => {
+    const winner = toB64(jsonToYState(text('winner')))
+    const racy: Repo = {
+      ...repo,
+      setYdocIfNull: async (id) => {
+        await repo.setYdocIfNull(id, winner)
+        return null
+      },
+    }
+    const r = await openLiveDocument(racy, D1, 'a')
+    expect(r.ok && r.value.ydoc).toBe(winner)
+  })
+  it('save before the doc has a ydoc is a conflict', async () => {
+    const base = jsonToYState(text('hi'))
+    expect(await saveLiveUpdate(repo, 'a', { id: D1, update: addParagraph(base, 'AAA') })).toMatchObject({ ok: false, error: 'conflict' })
+  })
+  it('compacts: deleted text is not retained', async () => {
+    const o = await openLiveDocument(repo, D1, 'a')
+    if (!o.ok) throw new Error('open')
+    const client = new Y.Doc()
+    Y.applyUpdate(client, fromB64(o.value.ydoc))
+    const frag = client.getXmlFragment('default')
+    for (let i = 0; i < 5; i++) {
+      let up!: Uint8Array
+      const grab = (u: Uint8Array) => { up = u }
+      client.on('update', grab)
+      const p = new Y.XmlElement('paragraph')
+      p.insert(0, [new Y.XmlText('SECRETSECRET'.repeat(8000))])
+      frag.insert(frag.length, [p])
+      expect(await saveLiveUpdate(repo, 'a', { id: D1, update: toB64(up) })).toMatchObject({ ok: true })
+      frag.delete(frag.length - 1, 1)
+      expect(await saveLiveUpdate(repo, 'a', { id: D1, update: toB64(up) })).toMatchObject({ ok: true })
+      client.off('update', grab)
+    }
+    const stored = (await repo.getDocument(D1))!.ydoc!
+    expect(stored.length).toBeLessThan(10_000)
+    expect(Buffer.from(stored, 'base64').toString('latin1')).not.toContain('SECRETSECRET')
+  })
+  it('update writing to a non-default root is invalid', async () => {
+    const o = await openLiveDocument(repo, D1, 'a')
+    if (!o.ok) throw new Error('open')
+    const d = new Y.Doc()
+    Y.applyUpdate(d, fromB64(o.value.ydoc))
+    let up!: Uint8Array
+    d.on('update', (u: Uint8Array) => { up = u })
+    d.getMap('x').set('k', 'v')
+    expect(await saveLiveUpdate(repo, 'a', { id: D1, update: toB64(up) })).toMatchObject({ ok: false, error: 'invalid' })
+  })
+  it('oversize incoming update is invalid', async () => {
+    const o = await openLiveDocument(repo, D1, 'a')
+    if (!o.ok) throw new Error('open')
+    const r = await saveLiveUpdate(repo, 'a', { id: D1, update: addParagraph(fromB64(o.value.ydoc), 'x'.repeat(2_100_000)) })
+    expect(r).toMatchObject({ ok: false, error: 'invalid' })
   })
 })

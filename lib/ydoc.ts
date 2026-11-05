@@ -32,3 +32,14 @@ export function fromB64(s: string): Uint8Array {
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
   return out
 }
+
+// Re-encodes a merged state with GC on: drops deleted content, keeps item ids so
+// connected clients stay in sync. Throws if any root other than 'default' exists.
+export function compactState(state: Uint8Array): { state: Uint8Array; json: JSONContent } {
+  const doc = new Y.Doc({ gc: true })
+  Y.applyUpdate(doc, state)
+  for (const name of doc.share.keys()) {
+    if (name !== FRAGMENT) throw new Error('Unexpected root type')
+  }
+  return { state: Y.encodeStateAsUpdate(doc), json: yDocToProsemirrorJSON(doc, FRAGMENT) as JSONContent }
+}
