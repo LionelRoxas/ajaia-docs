@@ -1,5 +1,6 @@
 import { config } from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
+import { DEMO_USERS } from '../lib/limits'
 
 config({ path: '.env.local' })
 
@@ -15,12 +16,6 @@ if (!url || !serviceKey || !password) {
 const admin = createClient(url, serviceKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 })
-
-const DEMO_USERS = [
-  { email: 'alice@demo.test', name: 'Alice' },
-  { email: 'bob@demo.test', name: 'Bob' },
-  { email: 'carol@demo.test', name: 'Carol' },
-]
 
 const WELCOME_CONTENT = {
   type: 'doc',
