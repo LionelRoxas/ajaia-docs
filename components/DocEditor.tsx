@@ -41,7 +41,7 @@ export default function DocEditor({ id, version, title: initialTitle, content, i
   const [status, setStatus] = useState<Status>('idle')
   const [message, setMessage] = useState<string>()
   const [title, setTitle] = useState(initialTitle)
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<'ok' | 'failed' | null>(null)
   const [reloading, startReload] = useTransition()
   const savedTitle = useRef(initialTitle)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -92,12 +92,15 @@ export default function DocEditor({ id, version, title: initialTitle, content, i
     },
   })
 
-  // Send the pending debounced edit now (on debounce, Back link, and unmount via client navigation).
+  // Send the pending debounced edit now (on debounce, Back link, and unmount via client navigation),
+  // and resend anything the queue kept after a failed request.
   function flushNow() {
-    if (!timer.current || !latestDoc.current) return
-    clearTimeout(timer.current)
-    timer.current = null
-    push({ content: latestDoc.current.toJSON() })
+    if (timer.current && latestDoc.current) {
+      clearTimeout(timer.current)
+      timer.current = null
+      push({ content: latestDoc.current.toJSON() })
+    }
+    void queue.current?.flush()
   }
   useEffect(() => () => flushNow(), []) // eslint-disable-line react-hooks/exhaustive-deps -- refs only
 
@@ -108,7 +111,9 @@ export default function DocEditor({ id, version, title: initialTitle, content, i
 
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
-      if (unsaved.current || timer.current) e.preventDefault()
+      if (!unsaved.current && !timer.current) return
+      e.preventDefault()
+      e.returnValue = '' // older browsers need this to show the prompt
     }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
@@ -130,8 +135,12 @@ export default function DocEditor({ id, version, title: initialTitle, content, i
 
   const copyText = async () => {
     if (!editor) return
-    await navigator.clipboard.writeText(editor.getText())
-    setCopied(true)
+    try {
+      await navigator.clipboard.writeText(editor.getText())
+      setCopied('ok')
+    } catch {
+      setCopied('failed')
+    }
   }
 
   const conflict = status === 'conflict'
@@ -180,14 +189,17 @@ export default function DocEditor({ id, version, title: initialTitle, content, i
             role="alert"
             className="mx-auto mb-4 flex max-w-[50rem] flex-wrap items-center gap-x-4 gap-y-3 rounded-lg border border-danger/30 bg-danger/[0.05] px-4 py-3"
           >
-            <p className="min-w-0 flex-1 text-sm text-ink">{CONFLICT_MESSAGE}</p>
+            <div className="min-w-0 flex-1 text-sm">
+              <p className="text-ink">{CONFLICT_MESSAGE}</p>
+              {copied === 'failed' && <p className="mt-1 text-danger">Couldn&apos;t copy. Select the text and copy it manually.</p>}
+            </div>
             <div className="flex shrink-0 gap-2">
               <button
                 type="button"
                 onClick={copyText}
                 className="rounded-md border border-line bg-paper px-3 py-1.5 text-sm font-medium hover:bg-canvas"
               >
-                {copied ? 'Copied' : 'Copy my text'}
+                {copied === 'ok' ? 'Copied' : 'Copy my text'}
               </button>
               <button
                 type="button"

@@ -111,11 +111,54 @@ describe('createSaveQueue', () => {
     q.push({ title: 'Kept', content: doc('a') })
     await tick()
     calls[0].reject(new Error('offline'))
-    await q.flush()
+    await tick()
     expect(onStatus).toHaveBeenLastCalledWith('error', expect.any(String))
 
     q.push({ content: doc('b') })
     await tick()
     expect(calls[1]).toMatchObject({ patch: { title: 'Kept', content: doc('b') }, version: 1 })
+  })
+
+  it('flush() resends work kept after a network failure, with no new push', async () => {
+    const { send, calls } = controllableSend()
+    const onStatus = vi.fn()
+    const q = createSaveQueue({ initialVersion: 3, send, onStatus })
+
+    q.push({ title: 'Kept', content: doc('a') })
+    await tick()
+    calls[0].reject(new Error('offline'))
+    await tick()
+    expect(send).toHaveBeenCalledTimes(1)
+
+    const flushed = q.flush()
+    await tick()
+    expect(send).toHaveBeenCalledTimes(2)
+    expect(calls[1]).toMatchObject({ patch: { title: 'Kept', content: doc('a') }, version: 3 })
+    calls[1].resolve({ ok: true, value: { version: 4 } })
+    await flushed
+    expect(onStatus).toHaveBeenLastCalledWith('saved')
+  })
+
+  it('starts a new request for a push that lands just as the previous run finishes', async () => {
+    const { send, calls } = controllableSend()
+    let first = true
+    const q = createSaveQueue({
+      initialVersion: 1,
+      send,
+      // Push from a microtask queued during the final status: after the loop exits, before any cleanup.
+      onStatus: (s) => {
+        if (s === 'saved' && first) {
+          first = false
+          queueMicrotask(() => q.push({ content: doc('late') }))
+        }
+      },
+    })
+
+    q.push({ content: doc('a') })
+    await tick()
+    calls[0].resolve({ ok: true, value: { version: 2 } })
+    await tick()
+    expect(send).toHaveBeenCalledTimes(2)
+    expect(calls[1]).toMatchObject({ patch: { content: doc('late') }, version: 2 })
   })
 })
