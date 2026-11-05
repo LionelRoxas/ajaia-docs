@@ -92,7 +92,7 @@ describe('live', () => {
   })
   it('malformed update is invalid', async () => {
     await openLiveDocument(repo, D1, 'a')
-    expect(await saveLiveUpdate(repo, 'a', { id: D1, update: 'AAAA' })).toMatchObject({ ok: false, error: 'invalid' })
+    expect(await saveLiveUpdate(repo, 'a', { id: D1, update: '////////' })).toMatchObject({ ok: false, error: 'invalid' })
     expect(await saveLiveUpdate(repo, 'a', { id: D1, update: '!!!not base64' })).toMatchObject({ ok: false, error: 'invalid' })
   })
   it('re-sending the same update is idempotent', async () => {
