@@ -31,7 +31,7 @@ export async function signUp(formData: FormData): Promise<AuthResult> {
     user_metadata: { name },
   })
   if (createErr) {
-    const exists = /already|registered|exists/i.test(createErr.message) || createErr.status === 422
+    const exists = createErr.code === 'email_exists'
     return { error: exists ? 'An account with that email already exists' : 'Could not create account' }
   }
   const supabase = await createSessionClient()

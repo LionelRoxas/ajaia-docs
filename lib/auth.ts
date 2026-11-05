@@ -8,12 +8,20 @@ export const getUser = cache(async (): Promise<Profile | null> => {
   const supabase = await createSessionClient()
   const { data } = await supabase.auth.getUser()
   if (!data.user) return null
+  const authUser = data.user
   const { data: profile } = await createAdminClient()
     .from('profiles')
     .select('id, email, name')
     .eq('id', data.user.id)
     .maybeSingle()
-  return (profile as Profile | null) ?? null
+  if (profile) return profile as Profile
+  const email = (authUser.email ?? '').toLowerCase()
+  const metaName = authUser.user_metadata?.name
+  return {
+    id: authUser.id,
+    email,
+    name: typeof metaName === 'string' && metaName ? metaName : email.split('@')[0],
+  }
 })
 
 export async function requireUser(): Promise<Profile> {

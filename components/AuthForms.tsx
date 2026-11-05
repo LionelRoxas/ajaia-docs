@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, type FormEvent } from 'react'
 import { signIn, signInAsDemo, signUp } from '@/app/auth/actions'
 
 type Demo = { email: string; name: string }
@@ -16,6 +16,13 @@ export default function AuthForms({ demoUsers }: { demoUsers: Demo[] }) {
       const res = await fn()
       if (res) setError(res.error)
     })
+
+  const onSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (pending) return
+    const fd = new FormData(e.currentTarget)
+    run(() => (mode === 'signin' ? signIn(fd) : signUp(fd)))
+  }
 
   const input = 'w-full rounded border border-zinc-300 px-3 py-2 text-sm'
 
@@ -40,10 +47,7 @@ export default function AuthForms({ demoUsers }: { demoUsers: Demo[] }) {
         <div className="h-px flex-1 bg-zinc-200" />
       </div>
 
-      <form
-        action={(fd) => run(() => (mode === 'signin' ? signIn(fd) : signUp(fd)))}
-        className="space-y-3"
-      >
+      <form onSubmit={onSubmit} className="space-y-3">
         {mode === 'signup' && (
           <input name="name" placeholder="Name" required autoComplete="name" className={input} />
         )}
@@ -73,11 +77,12 @@ export default function AuthForms({ demoUsers }: { demoUsers: Demo[] }) {
 
       <button
         type="button"
+        disabled={pending}
         onClick={() => {
           setError(null)
           setMode(mode === 'signin' ? 'signup' : 'signin')
         }}
-        className="w-full text-center text-sm text-zinc-600 underline"
+        className="w-full text-center text-sm text-zinc-600 underline disabled:opacity-50"
       >
         {mode === 'signin' ? 'New here? Create an account' : 'Have an account? Sign in'}
       </button>
