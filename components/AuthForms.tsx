@@ -24,27 +24,27 @@ export default function AuthForms({ demoUsers }: { demoUsers: Demo[] }) {
     run(() => (mode === 'signin' ? signIn(fd) : signUp(fd)))
   }
 
-  const input = 'w-full rounded border border-zinc-300 px-3 py-2 text-sm'
+  const input = 'w-full rounded-md border border-line bg-paper px-3 py-2 text-sm placeholder:text-muted/70 focus:border-accent focus:outline-none'
 
   return (
-    <div className="mx-auto w-full max-w-sm space-y-6">
+    <div className="w-full space-y-6">
       <div className="space-y-2">
         {demoUsers.map((u) => (
           <button
             key={u.email}
             disabled={pending}
             onClick={() => run(() => signInAsDemo(u.email))}
-            className="w-full rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
+            className="w-full rounded-md bg-accent/[0.08] px-4 py-2.5 text-sm font-medium text-accent hover:bg-accent/[0.14] disabled:opacity-50"
           >
             Continue as {u.name}
           </button>
         ))}
       </div>
 
-      <div className="flex items-center gap-3 text-xs text-zinc-400">
-        <div className="h-px flex-1 bg-zinc-200" />
+      <div className="flex items-center gap-3 text-xs text-muted">
+        <div className="h-px flex-1 bg-line" />
         or
-        <div className="h-px flex-1 bg-zinc-200" />
+        <div className="h-px flex-1 bg-line" />
       </div>
 
       <form onSubmit={onSubmit} className="space-y-3">
@@ -62,14 +62,14 @@ export default function AuthForms({ demoUsers }: { demoUsers: Demo[] }) {
           className={input}
         />
         {error && (
-          <p role="alert" className="text-sm text-red-600">
+          <p role="alert" className="text-sm text-danger">
             {error}
           </p>
         )}
         <button
           type="submit"
           disabled={pending}
-          className="w-full rounded border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 disabled:opacity-50"
+          className="w-full rounded-md border border-line px-4 py-2 text-sm font-medium hover:bg-canvas disabled:opacity-50"
         >
           {mode === 'signin' ? 'Sign in' : 'Create account'}
         </button>
@@ -82,7 +82,7 @@ export default function AuthForms({ demoUsers }: { demoUsers: Demo[] }) {
           setError(null)
           setMode(mode === 'signin' ? 'signup' : 'signin')
         }}
-        className="w-full text-center text-sm text-zinc-600 underline disabled:opacity-50"
+        className="w-full text-center text-sm text-muted hover:text-ink disabled:opacity-50"
       >
         {mode === 'signin' ? 'New here? Create an account' : 'Have an account? Sign in'}
       </button>

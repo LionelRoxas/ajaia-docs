@@ -59,4 +59,13 @@ describe('fileToDocument', () => {
   it('rejects corrupt docx', async () => {
     expect(await fileToDocument(fixture('corrupt.docx'))).toEqual({ ok: false, error: 'invalid', message: "Couldn't read that file" })
   })
+  it('strips scripts, images and javascript: links from markdown', async () => {
+    const md = ['[x](javascript:alert(1))', '<script>alert(1)</script>', '<img src=x onerror=alert(1)>'].join('\n\n')
+    const r = await fileToDocument(mk('x.md', md))
+    if (!r.ok) throw new Error(r.message)
+    const all = walk(r.value.content)
+    const hrefs = all.flatMap((n) => n.marks ?? []).filter((m) => m.type === 'link').map((m) => String(m.attrs?.href ?? ''))
+    expect(hrefs.some((h) => h.trim().toLowerCase().startsWith('javascript:'))).toBe(false)
+    expect(all.some((n) => ['script', 'img', 'image'].includes(n.type ?? ''))).toBe(false)
+  })
 })
