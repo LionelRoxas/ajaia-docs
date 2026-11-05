@@ -21,6 +21,7 @@ export default async function DocPage({ params }: { params: Promise<{ id: string
       content={doc.content}
       isOwner={role === 'owner'}
       ownerName={ownerName}
+      userEmail={user.email}
     />
   )
 }

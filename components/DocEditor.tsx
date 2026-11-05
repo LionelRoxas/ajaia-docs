@@ -20,6 +20,7 @@ import {
 import { saveDocumentAction } from '@/app/docs/[id]/actions'
 import Toolbar from './Toolbar'
 import SaveStatus from './SaveStatus'
+import SharePanel from './SharePanel'
 
 const DEBOUNCE_MS = 1000
 const tooLarge = (c: JSONContent) => new TextEncoder().encode(JSON.stringify(c)).length > CONTENT_MAX_BYTES
@@ -34,9 +35,10 @@ type Props = {
   content: JSONContent
   isOwner: boolean
   ownerName: string
+  userEmail: string
 }
 
-export default function DocEditor({ id, version, title: initialTitle, content, isOwner, ownerName }: Props) {
+export default function DocEditor({ id, version, title: initialTitle, content, isOwner, ownerName, userEmail }: Props) {
   const router = useRouter()
   const [status, setStatus] = useState<Status>('idle')
   const [message, setMessage] = useState<string>()
@@ -167,12 +169,7 @@ export default function DocEditor({ id, version, title: initialTitle, content, i
             <SaveStatus status={status} message={message} />
           </div>
           {isOwner ? (
-            <button
-              type="button"
-              className="shrink-0 rounded-md bg-accent px-3.5 py-1.5 text-sm font-medium text-white hover:bg-accent-hover"
-            >
-              Share
-            </button>
+            <SharePanel docId={id} currentEmail={userEmail} />
           ) : (
             <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 text-xs text-muted">Shared by {ownerName}</span>
           )}
