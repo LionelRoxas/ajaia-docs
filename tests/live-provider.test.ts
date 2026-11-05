@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import * as Y from 'yjs'
 import { Awareness } from 'y-protocols/awareness'
 import { createLiveProvider, type LiveChannel } from '@/lib/live-provider'
@@ -7,16 +7,24 @@ type Handler = (payload: unknown) => void
 
 // In-memory broadcast bus: each channel receives what the others send (broadcast self: false).
 function createBus() {
-  const members = new Set<{ handlers: Map<string, Handler[]>; joined: boolean }>()
+  type Member = { handlers: Map<string, Handler[]>; joined: boolean; dropNext: number }
+  const members = new Set<Member>()
   const sent: { event: string; payload: unknown }[] = []
+  const all: Member[] = []
+  let status: ((s: string, err?: Error) => void) | undefined
   function channel(): LiveChannel {
-    const me = { handlers: new Map<string, Handler[]>(), joined: false }
+    const me: Member = { handlers: new Map<string, Handler[]>(), joined: false, dropNext: 0 }
     members.add(me)
+    all.push(me)
     return {
       send(event, payload) {
         sent.push({ event, payload })
         for (const m of members) {
           if (m === me || !m.joined) continue
+          if (event === 'update' && m.dropNext > 0) {
+            m.dropNext--
+            continue
+          }
           for (const h of m.handlers.get(event) ?? []) h(JSON.parse(JSON.stringify(payload)))
         }
       },
@@ -25,6 +33,7 @@ function createBus() {
       },
       subscribe(cb) {
         me.joined = true
+        status = cb
         cb('SUBSCRIBED')
       },
       unsubscribe() {
@@ -33,7 +42,14 @@ function createBus() {
       },
     }
   }
-  return { channel, sent }
+  /** Deliver a raw payload to member i (0-based join order). */
+  const deliver = (i: number, event: string, payload: Record<string, unknown>) =>
+    (all[i].handlers.get(event) ?? []).forEach((h) => h(payload))
+  /** Drop the next n `update` messages addressed to member i. */
+  const drop = (i: number, n: number) => (all[i].dropNext = n)
+  /** Emit a status to the most recently subscribed channel. */
+  const emitStatus = (s: string, err?: Error) => status?.(s, err)
+  return { channel, sent, deliver, drop, emitStatus }
 }
 
 const cleanups: (() => void)[] = []
@@ -126,5 +142,76 @@ describe('createLiveProvider', () => {
     a.ydoc.getText('t').insert(0, 'late')
     a.awareness.setLocalStateField('user', { name: 'Alice2', color: '#0f0' })
     expect(bus.sent.length).toBe(before)
+  })
+
+  it('self-heals after a dropped update by sending a fresh sync', () => {
+    const bus = createBus()
+    const a = peer(bus, 'Alice')
+    const b = peer(bus, 'Bob')
+    bus.drop(1, 1)
+    a.ydoc.getText('t').insert(0, 'abc') // lost on the way to Bob
+    a.ydoc.getText('t').insert(3, 'def') // depends on it: parked as pending, Bob asks for a sync
+    expect(b.text()).toBe('abcdef')
+    expect(b.ydoc.store.pendingStructs).toBeNull()
+  })
+
+  it('stops sending when the channel drops, passes the error through, resumes on resubscribe', () => {
+    const bus = createBus()
+    peer(bus, 'Alice')
+    const seen: [string, Error | undefined][] = []
+    const ydoc = new Y.Doc()
+    const awareness = new Awareness(ydoc)
+    const p = createLiveProvider({ channel: bus.channel(), ydoc, awareness, onStatus: (s, e) => seen.push([s, e]) })
+    cleanups.push(() => (p.destroy(), awareness.destroy()))
+    const err = new Error('denied')
+    bus.emitStatus('CHANNEL_ERROR', err)
+    expect(seen.at(-1)).toEqual(['CHANNEL_ERROR', err])
+    const before = bus.sent.length
+    ydoc.getText('t').insert(0, 'offline')
+    p.send('title', { t: 'x' })
+    expect(bus.sent.length).toBe(before)
+    bus.emitStatus('SUBSCRIBED')
+    expect(bus.sent.slice(before).map((s) => s.event)).toContain('sync')
+  })
+
+  it('ignores malformed payloads and keeps working', () => {
+    const bus = createBus()
+    const a = peer(bus, 'Alice')
+    const b = peer(bus, 'Bob')
+    expect(() => {
+      bus.deliver(1, 'update', { u: '%%%not base64' })
+      bus.deliver(1, 'update', { u: 'AAAAAAAA' })
+      bus.deliver(1, 'sync', { sv: '%%%' })
+      bus.deliver(1, 'awareness', { a: 'AQID' })
+    }).not.toThrow()
+    a.ydoc.getText('t').insert(0, 'still fine')
+    expect(b.text()).toBe('still fine')
+  })
+
+  it('relays app events via send()', () => {
+    const bus = createBus()
+    const a = peer(bus, 'Alice')
+    a.provider.send('title', { t: 'New title' })
+    expect(bus.sent.at(-1)).toEqual({ event: 'title', payload: { t: 'New title' } })
+  })
+
+  it('drops the local caret on pagehide and restores it on a bfcache pageshow', () => {
+    const win = new EventTarget()
+    vi.stubGlobal('window', win)
+    try {
+      const bus = createBus()
+      const seenByA: string[][] = []
+      peer(bus, 'Alice', (n) => seenByA.push(n))
+      const b = peer(bus, 'Bob')
+      expect(seenByA.at(-1)).toEqual(['Bob'])
+      win.dispatchEvent(new Event('pagehide'))
+      // Both peers share the stubbed window here; Bob's removal reaches Alice.
+      expect(seenByA.at(-1)).toEqual([])
+      expect(b.awareness.getLocalState()).toBeNull()
+      win.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true }))
+      expect(seenByA.at(-1)).toEqual(['Bob'])
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
