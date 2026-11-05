@@ -5,7 +5,7 @@ import { signIn, signInAsDemo, signUp } from '@/app/auth/actions'
 
 type Demo = { email: string; name: string }
 
-export default function AuthForms({ demoUsers }: { demoUsers: Demo[] }) {
+export default function AuthForms({ demoUsers, next }: { demoUsers: Demo[]; next: string }) {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
   const [error, setError] = useState<string | null>(null)
   const [pending, start] = useTransition()
@@ -21,6 +21,7 @@ export default function AuthForms({ demoUsers }: { demoUsers: Demo[] }) {
     e.preventDefault()
     if (pending) return
     const fd = new FormData(e.currentTarget)
+    fd.set('next', next)
     run(() => (mode === 'signin' ? signIn(fd) : signUp(fd)))
   }
 
@@ -33,7 +34,7 @@ export default function AuthForms({ demoUsers }: { demoUsers: Demo[] }) {
           <button
             key={u.email}
             disabled={pending}
-            onClick={() => run(() => signInAsDemo(u.email))}
+            onClick={() => run(() => signInAsDemo(u.email, next))}
             className="w-full rounded-md bg-accent/[0.08] px-4 py-2.5 text-sm font-medium text-accent hover:bg-accent/[0.14] disabled:opacity-50"
           >
             Continue as {u.name}

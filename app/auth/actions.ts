@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { createAdminClient, createSessionClient } from '@/lib/supabase/server'
 import { DEMO_USERS } from '@/lib/limits'
+import { safeNext } from '@/lib/auth-redirect'
 
 type AuthResult = { error: string } | undefined
 
@@ -13,7 +14,7 @@ export async function signIn(formData: FormData): Promise<AuthResult> {
   const supabase = await createSessionClient()
   const { error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) return { error: 'Invalid email or password' }
-  redirect('/docs')
+  redirect(safeNext(String(formData.get('next') ?? '')))
 }
 
 export async function signUp(formData: FormData): Promise<AuthResult> {
@@ -37,17 +38,17 @@ export async function signUp(formData: FormData): Promise<AuthResult> {
   const supabase = await createSessionClient()
   const { error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) return { error: 'Account created, but sign-in failed. Try signing in.' }
-  redirect('/docs')
+  redirect(safeNext(String(formData.get('next') ?? '')))
 }
 
-export async function signInAsDemo(email: string): Promise<AuthResult> {
+export async function signInAsDemo(email: string, next?: string): Promise<AuthResult> {
   if (!DEMO_USERS.some((u) => u.email === email)) return { error: 'Unknown demo account' }
   const password = process.env.DEMO_PASSWORD
   if (!password) return { error: 'Demo sign-in is not configured' }
   const supabase = await createSessionClient()
   const { error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) return { error: 'Demo sign-in failed' }
-  redirect('/docs')
+  redirect(safeNext(next))
 }
 
 export async function signOut() {
