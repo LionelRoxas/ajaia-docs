@@ -31,7 +31,6 @@ Success: a reviewer opens the live URL, signs in as a demo user in one click, wr
 
 | Cut | Why |
 |---|---|
-| Live co-editing, cursors, presence | Optional stretch in the brief; high risk, hard to demo reliably. Conflict detection covers the safety need. |
 | Redis / caching | Nothing at this scale needs it; one less service to configure. |
 | Password reset, OAuth, email verification | Real sign-in exists; account-recovery flows add nothing to the demo. |
 | Roles beyond owner / editor | Not required; one access level keeps the logic obvious. |
@@ -111,6 +110,28 @@ Content is stored as Tiptap JSON, which preserves formatting and structure exact
 **Keep-alive.** Supabase free projects pause after ~1 week idle. A daily Vercel cron hits `/api/health`, which runs a trivial query.
 
 **Env vars.** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `DEMO_PASSWORD`.
+
+## Addendum (2026-11-05): live co-editing
+
+Owner decision: add live editing before deploy. Approach chosen: **Yjs CRDT relayed over Supabase Realtime** (no new service). Replaces the "live co-editing" non-goal.
+
+**Why not Google's way:** Google Docs uses Operational Transformation on a central always-on server. Vercel can't host persistent connections, and a CRDT needs no transform server — Supabase only relays and Postgres stores.
+
+**Behaviour**
+- Two people on the same doc see each other's text appear live, plus a named, colored caret each, and a small "Editing: Alice, Bob" presence line.
+- Content conflicts no longer happen; the content conflict banner is retired. Lost access and expired session still make the editor read-only with the existing messages.
+- Title stays a plain field: last write wins, broadcast to open tabs so it updates live. (Documented exception.)
+
+**Data**
+- New column `documents.ydoc text` — base64 Yjs state, the source of truth for content. `content jsonb` stays as a derived snapshot (doc list, import, fallback).
+- First open of a doc with no `ydoc`: server converts `content` → Yjs state and stores it only `where ydoc is null`; if it lost that race it re-reads.
+
+**Sync**
+- One private Realtime channel per doc, `doc:{id}`. Broadcast events: `update` (Yjs update), `awareness` (carets/presence), `sync` (new joiner asks; peers reply with their state diff).
+- Channel access: RLS policy on `realtime.messages` lets an authenticated user read/send on `doc:{id}` only if they own it or it's shared with them.
+- Saving: each client sends its own unsaved local updates to a server action ~1s after typing stops. The server checks access, merges with stored state (`Y.mergeUpdates`), derives `content`, enforces the 1 MB limit, and writes with the existing version check, retrying up to 3 times on a race. Updates are idempotent, so duplicates are harmless. Failed saves keep the updates and resend.
+
+**Known limits (documented):** a user unshared mid-session keeps receiving broadcasts until reconnect but can't save; title is last-write-wins.
 
 ## Left to the builder
 

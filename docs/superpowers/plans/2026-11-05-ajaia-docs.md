@@ -293,3 +293,81 @@ Each is short; no padding.
 - `VIDEO_URL.txt`: placeholder line for the owner's link.
 
 - [ ] **Step 1:** Write the five files. **Step 2:** `npm test && npm run build` pass. **Step 3:** Commit `docs: README, architecture, AI workflow, submission`.
+
+---
+
+## Live editing (added 2026-11-05 — run before Task 9's deploy steps)
+
+Spec: "Addendum: live co-editing". Tiptap v3: use `@tiptap/extension-collaboration` and `@tiptap/extension-collaboration-caret` with `yjs` + `y-protocols` (awareness); server-side JSON↔Yjs via the Tiptap/y-prosemirror helpers the installed versions export (e.g. `prosemirrorJSONToYDoc` / `yXmlFragmentToProsemirrorJSON` — confirm in node_modules). Yjs fragment name: `default`. StarterKit's undo/redo must be disabled when Collaboration is on.
+
+### Task 11: Yjs state on the server
+
+**Files:**
+- Create: `supabase/migrations/0002_ydoc.sql`, `lib/ydoc.ts`, `lib/live.ts`
+- Modify: `lib/types.ts` (DocRow gains `ydoc: string | null`), `lib/repo.ts`, `lib/repo.supabase.ts`, `lib/repo.memory.ts`
+- Test: `tests/ydoc.test.ts`, `tests/live.test.ts`
+
+**Interfaces:**
+- Migration: `alter table documents add column ydoc text;`
+- `repo.updateIfVersion` patch accepts `ydoc?: string`; new `repo.setYdocIfNull(id, ydoc): Promise<DocRow | null>` (update … where id and ydoc is null returning *).
+- `lib/ydoc.ts` (pure, client-safe except where noted):
+  - `jsonToYState(content: JSONContent): Uint8Array`
+  - `yStateToJson(state: Uint8Array): JSONContent`
+  - `mergeStates(states: Uint8Array[]): Uint8Array` (Y.mergeUpdates)
+  - `toB64(u: Uint8Array): string`, `fromB64(s: string): Uint8Array`
+- `lib/live.ts` (services, take `repo` first):
+  - `openLiveDocument(repo, id, userId): Promise<Result<{ doc: DocRow; role: Role; ownerName: string; ydoc: string }>>` — access via `accessFor`; if `doc.ydoc` null → `setYdocIfNull(id, toB64(jsonToYState(doc.content)))`, on null result re-read.
+  - `saveLiveUpdate(repo, userId, { id, update: string }): Promise<Result<{ version: number }>>` — access check (not_found), merge stored+incoming, derive content, `CONTENT_MAX_BYTES` → invalid, `updateIfVersion` with retry ×3 on conflict, then `conflict` only if all retries fail.
+  - `saveTitle(repo, userId, { id, title }): Promise<Result<{ title: string }>>` — access check, normalize like saveDocument, write without version check (last write wins; still bumps version).
+
+- [ ] **Step 1: failing tests** — `ydoc.test.ts`: JSON → Y → JSON round-trip keeps heading, bold, bulletList; two Y.Docs from the same base state each insert different text, `mergeStates` of base + both updates → JSON contains both insertions exactly once; merging the same update twice is idempotent. `live.test.ts` (memoryRepo): stranger `openLiveDocument` → not_found; first open sets ydoc, second open returns the same ydoc; `saveLiveUpdate` from two clients based on the same state → stored content has both edits; repo whose `updateIfVersion` returns null once then succeeds → ok (retry); oversize merged content → invalid; `saveTitle` blank → `Untitled document`.
+- [ ] **Step 2:** run — FAIL. **Step 3:** implement. **Step 4:** run — PASS; tsc clean.
+- [ ] **Step 5:** commit `feat: Yjs document state with merge-on-save`. (Controller applies migration 0002.)
+
+### Task 12: Realtime channel access + client provider
+
+**Files:**
+- Create: `supabase/migrations/0003_realtime_access.sql`, `lib/supabase/browser.ts`, `lib/live-provider.ts`
+- Test: `tests/live-provider.test.ts`
+
+**Interfaces:**
+- Migration: SQL function `public.can_access_doc(doc uuid) returns boolean` (security definer, `search_path = public`; true if `auth.uid()` owns `doc` or has a share row). RLS on `realtime.messages`: `select` and `insert` for `authenticated` where `realtime.messages.extension = 'broadcast'` and `realtime.topic() like 'doc:%'` and `can_access_doc(substring(realtime.topic() from 5)::uuid)` (guard the cast: only when the suffix is a UUID).
+- `lib/supabase/browser.ts`: `createBrowserSupabase(): SupabaseClient` (`@supabase/ssr` createBrowserClient, anon key).
+- `lib/live-provider.ts`:
+  ```ts
+  export function createLiveProvider(opts: {
+    channel: LiveChannel            // thin wrapper: send(event, payload), on(event, cb), subscribe(cb), unsubscribe()
+    ydoc: Y.Doc
+    awareness: Awareness
+    onPeers?: (names: string[]) => void
+  }): { destroy(): void }
+  export function supabaseLiveChannel(client: SupabaseClient, docId: string): LiveChannel  // private: true, broadcast self: false
+  ```
+  - local Y updates (origin ≠ provider) → `send('update', { u: b64 })`; incoming `update` → `Y.applyUpdate(ydoc, …, provider)`
+  - on subscribed → `send('sync', { sv: b64(stateVector) })`; incoming `sync` → reply `update` with `Y.encodeStateAsUpdate(ydoc, sv)`
+  - awareness changes → `send('awareness', …)`; incoming → `applyAwarenessUpdate`; `onPeers` with other users' names
+  - `destroy()` removes listeners, marks local awareness offline, unsubscribes
+
+- [ ] **Step 1: failing tests** with an in-memory `LiveChannel` pair/bus: edits in doc A appear in doc B; a late joiner C syncs full state via `sync`; awareness names reach `onPeers`; after `destroy()` no more sends.
+- [ ] **Step 2:** FAIL. **Step 3:** implement. **Step 4:** PASS.
+- [ ] **Step 5:** commit `feat: Yjs relay over Supabase Realtime with channel access rules`. (Controller applies migration 0003 and verifies a stranger can't join.)
+
+### Task 13: Live editor
+
+**Files:**
+- Modify: `app/docs/[id]/page.tsx`, `app/docs/[id]/actions.ts`, `components/DocEditor.tsx`, `components/SaveStatus.tsx`
+- Create: `components/Presence.tsx`
+- Remove or stop using: the content conflict banner path and `lib/save-queue.ts` content saving (title may keep using a small queue or direct action)
+
+**Interfaces:**
+- Page loads via `openLiveDocument`; passes `ydoc` (b64), `role`, `ownerName`, user `{ id, name }`. Drop `key={doc.version}` remount.
+- Actions: `saveLiveUpdateAction({ id, update })`, `saveTitleAction({ id, title })` → `unauthorized` without session.
+- Editor: `new Y.Doc()` + `applyUpdate(fromB64(ydoc))`; extensions = `editorExtensions` (StarterKit undoRedo off) + `Collaboration.configure({ document: ydoc, field: 'default' })` + `CollaborationCaret.configure({ provider-compatible awareness, user: { name, color } })` (color derived from user id). Provider from Task 12 on `doc:{id}`.
+- Saving: collect local-origin updates; 1000 ms after the last one, send `mergeStates(pending)` via `saveLiveUpdateAction`; keep on failure and resend on next flush; flush on Back link/unmount; `beforeunload` while pending. Status: `Saving…` / `Saved` / `Error` (no `Conflict` for content).
+- not_found / unauthorized → editor read-only + existing messages, provider destroyed.
+- Title: save on blur/Enter via `saveTitleAction`; broadcast `title` on the channel; incoming `title` updates the field if not focused.
+- Presence line in the toolbar: `Editing: {names}` (others only; hidden when alone).
+
+- [ ] **Step 1:** build; `npm test`, tsc, lint pass (update/remove tests tied to retired code).
+- [ ] **Step 2: live check** with two browser contexts (Alice + Bob on Welcome): typing in one appears in the other within ~1 s; both carets with names; presence line; both reload → identical content (persisted); Bob unshared → his save shows the access message; title rename appears in the other tab.
+- [ ] **Step 3:** commit `feat: live co-editing with carets and presence`.
