@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import type { JSONContent } from '@tiptap/core'
+import JSZip from 'jszip'
 import { fileToDocument } from '@/lib/import'
 
 const enc = (s: string) => new TextEncoder().encode(s).buffer as ArrayBuffer
@@ -67,5 +68,25 @@ describe('fileToDocument', () => {
     const hrefs = all.flatMap((n) => n.marks ?? []).filter((m) => m.type === 'link').map((m) => String(m.attrs?.href ?? ''))
     expect(hrefs.some((h) => h.trim().toLowerCase().startsWith('javascript:'))).toBe(false)
     expect(all.some((n) => ['script', 'img', 'image'].includes(n.type ?? ''))).toBe(false)
+  })
+})
+
+describe('docx decompression guard', () => {
+  const UNREADABLE = { ok: false, error: 'invalid', message: "Couldn't read that file" }
+  const build = async (add: (z: JSZip) => void) => {
+    const base = fixture('sample.docx')
+    const zip = await JSZip.loadAsync(base.bytes)
+    add(zip)
+    const b = await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' })
+    return { name: 'big.docx', size: b.length, bytes: b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer }
+  }
+  it('rejects a docx that decompresses past 10 MB', async () => {
+    const f = await build((z) => z.file('word/pad.bin', new Uint8Array(11 * 1024 * 1024)))
+    expect(f.size).toBeLessThan(1_048_576)
+    expect(await fileToDocument(f)).toEqual(UNREADABLE)
+  })
+  it('rejects a docx with too many entries', async () => {
+    const f = await build((z) => { for (let i = 0; i < 201; i++) z.file(`word/x${i}.txt`, 'x') })
+    expect(await fileToDocument(f)).toEqual(UNREADABLE)
   })
 })
