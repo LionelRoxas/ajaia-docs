@@ -44,3 +44,7 @@ next-env.d.ts
 # local tooling
 .claude/
 .playwright-mcp/
+
+.vercel
+.env*
+!.env.example
