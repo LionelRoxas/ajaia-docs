@@ -10,7 +10,10 @@ import { Awareness } from 'y-protocols/awareness'
 import { liveEditorExtensions } from '@/lib/editor-extensions'
 import { DEFAULT_TITLE, TITLE_MAX } from '@/lib/limits'
 import { FRAGMENT, fromB64 } from '@/lib/ydoc'
-import { createLiveProvider, supabaseLiveChannel, type LiveProvider } from '@/lib/live-provider'
+import { supabaseLiveChannel } from '@/lib/live-provider'
+import { createLiveSession, type LiveSession } from '@/lib/live-session'
+import { colorFor, safeCaretColor } from '@/lib/caret-colors'
+import { defaultSelectionBuilder } from '@tiptap/y-tiptap'
 import {
   NO_ACCESS_MESSAGE,
   SESSION_EXPIRED_MESSAGE,
@@ -19,35 +22,45 @@ import {
   type Status,
 } from '@/lib/live-save'
 import { createBrowserSupabase } from '@/lib/supabase/browser'
-import { saveLiveUpdateAction, saveTitleAction } from '@/app/docs/[id]/actions'
+import { getLiveEpochAction, saveLiveUpdateAction, saveTitleAction } from '@/app/docs/[id]/actions'
 import Toolbar from './Toolbar'
 import SaveStatus from './SaveStatus'
 import SharePanel from './SharePanel'
 import Presence from './Presence'
 
-// Caret colors: distinct, and dark enough for the white name label.
-const COLORS = ['#2453d6', '#c0362c', '#0f7b6c', '#8a4bd6', '#b45309', '#be185d', '#0369a1', '#4d7c0f']
-function colorFor(userId: string): string {
-  let h = 0
-  for (let i = 0; i < userId.length; i++) h = (h * 31 + userId.charCodeAt(i)) >>> 0
-  return COLORS[h % COLORS.length]
+// Peer carets: color limited to our palette, name inserted as text.
+type CaretUser = { name?: unknown; color?: unknown }
+function renderCaret(user: CaretUser): HTMLElement {
+  const color = safeCaretColor(user.color)
+  const caret = document.createElement('span')
+  caret.classList.add('collaboration-carets__caret')
+  caret.style.borderColor = color
+  const label = document.createElement('div')
+  label.classList.add('collaboration-carets__label')
+  label.style.backgroundColor = color
+  label.textContent = typeof user.name === 'string' ? user.name.slice(0, 60) : ''
+  caret.append(label)
+  return caret
 }
+const renderSelection = (user: CaretUser) =>
+  defaultSelectionBuilder({ name: typeof user.name === 'string' ? user.name : '', color: safeCaretColor(user.color) })
 
 // After these nothing more will save, so the editor goes read-only.
 const isStopMessage = (m?: string) => m === NO_ACCESS_MESSAGE || m === SESSION_EXPIRED_MESSAGE
 
-type Session = { ydoc: Y.Doc; provider: LiveProvider; saver: LiveSaver }
+type Session = { ydoc: Y.Doc; live: LiveSession; saver: LiveSaver }
 
 type Props = {
   id: string
   ydoc: string // base64 Yjs state from the server
+  epoch: number // share epoch: live topic doc:{id}:{epoch}
   title: string
   isOwner: boolean
   ownerName: string
   user: { id: string; name: string; email: string }
 }
 
-export default function DocEditor({ id, ydoc: serverState, title: initialTitle, isOwner, ownerName, user }: Props) {
+export default function DocEditor({ id, ydoc: serverState, epoch: initialEpoch, title: initialTitle, isOwner, ownerName, user }: Props) {
   const [status, setStatus] = useState<Status>('idle')
   const [message, setMessage] = useState<string>()
   const [stopped, setStopped] = useState(false)
@@ -55,13 +68,20 @@ export default function DocEditor({ id, ydoc: serverState, title: initialTitle, 
   const [title, setTitle] = useState(initialTitle)
   const [session, setSession] = useState<Session | null>(null)
   const [initialState] = useState(serverState) // later props never replace the live document
+  const [startEpoch] = useState(initialEpoch)
   const savedTitle = useRef(initialTitle)
   const titleFocused = useRef(false)
+  const titleAtFocus = useRef(initialTitle)
+  const remoteTitle = useRef<string | null>(null) // arrived while the field was focused
   const titleSaving = useRef(false)
   const sessionRef = useRef<Session | null>(null)
 
   const report = (s: Status, m?: string) => {
-    if (s === 'error' && isStopMessage(m)) setStopped(true)
+    if (s === 'error' && isStopMessage(m)) {
+      // Nothing more will save: drop pending work now so beforeunload stays quiet and no request fires.
+      sessionRef.current?.saver.stop()
+      setStopped(true)
+    }
     setStatus(s)
     setMessage(m)
   }
@@ -75,31 +95,42 @@ export default function DocEditor({ id, ydoc: serverState, title: initialTitle, 
     const ydoc = new Y.Doc()
     Y.applyUpdate(ydoc, fromB64(initialState))
     const awareness = new Awareness(ydoc)
-    const channel = supabaseLiveChannel(createBrowserSupabase(), id)
-    channel.on('title', (p) => {
-      if (typeof p.t !== 'string' || titleFocused.current) return
-      const t = p.t.slice(0, TITLE_MAX)
-      savedTitle.current = t
-      setTitle(t)
+    const client = createBrowserSupabase()
+    const live = createLiveSession({
+      ydoc,
+      awareness,
+      epoch: startEpoch,
+      channelFor: (e) => supabaseLiveChannel(client, id, e),
+      fetchLive: () => getLiveEpochAction(id),
+      onPeers: (names) => setPeers(names.filter((n) => n !== user.name)),
+      // Title broadcasts are only a hint; this is the title the server has.
+      onTitle: (t) => {
+        if (titleFocused.current) {
+          remoteTitle.current = t
+          return
+        }
+        savedTitle.current = t
+        setTitle(t)
+      },
+      onLost: (reason) => reportRef.current('error', reason === 'session' ? SESSION_EXPIRED_MESSAGE : NO_ACCESS_MESSAGE),
     })
-    const provider = createLiveProvider({ channel, ydoc, awareness, onPeers: (names) => setPeers(names.filter((n) => n !== user.name)) })
     const saver = createLiveSaver({
       ydoc,
-      isRemote: (o) => o === provider.origin,
+      isRemote: (o) => o === live.origin,
       send: (update) => saveLiveUpdateAction({ id, update }),
       onStatus: (s, m) => reportRef.current(s, m),
     })
-    const s = { ydoc, provider, saver }
+    const s = { ydoc, live, saver }
     sessionRef.current = s
     setSession(s) // the editor is built on this session
     return () => {
       void saver.flush() // client navigation away: send what's left (the request outlives the unmount)
       saver.destroy()
-      provider.destroy()
+      live.destroy()
       awareness.destroy()
       if (sessionRef.current === s) sessionRef.current = null
     }
-  }, [id, initialState, user.name])
+  }, [id, initialState, startEpoch, user.name])
 
   const editor = useEditor(
     {
@@ -107,7 +138,12 @@ export default function DocEditor({ id, ydoc: serverState, title: initialTitle, 
         ? [
             ...liveEditorExtensions,
             Collaboration.configure({ document: session.ydoc, field: FRAGMENT }),
-            CollaborationCaret.configure({ provider: session.provider, user: { name: user.name, color: colorFor(user.id) } }),
+            CollaborationCaret.configure({
+              provider: session.live,
+              user: { name: user.name, color: colorFor(user.id) },
+              render: renderCaret,
+              selectionRender: renderSelection,
+            }),
           ]
         : liveEditorExtensions,
       // No `content`: the Y.Doc is the content.
@@ -124,7 +160,8 @@ export default function DocEditor({ id, ydoc: serverState, title: initialTitle, 
   useEffect(() => {
     if (!stopped) return
     editor?.setEditable(false)
-    sessionRef.current?.provider.destroy()
+    sessionRef.current?.saver.stop()
+    sessionRef.current?.live.destroy()
     setPeers([]) // eslint-disable-line react-hooks/set-state-in-effect -- nobody is shown once we've left
   }, [stopped, editor])
 
@@ -148,6 +185,14 @@ export default function DocEditor({ id, ydoc: serverState, title: initialTitle, 
 
   const saveTitle = async () => {
     titleFocused.current = false
+    const remote = remoteTitle.current
+    remoteTitle.current = null
+    if (remote !== null && title === titleAtFocus.current) {
+      // Renamed elsewhere while focused here, and untouched here: take theirs.
+      savedTitle.current = remote
+      setTitle(remote)
+      return
+    }
     const next = title.trim() || DEFAULT_TITLE
     if (next !== title) setTitle(next)
     if (next === savedTitle.current || stopped) return
@@ -162,7 +207,7 @@ export default function DocEditor({ id, ydoc: serverState, title: initialTitle, 
     }
     titleSaving.current = false
     if (res.ok) {
-      sessionRef.current?.provider.send('title', { t: res.value.title })
+      sessionRef.current?.live.send('title', {}) // a hint: peers fetch the title from the server
       if (!sessionRef.current?.saver.hasUnsaved()) report('saved')
       return
     }
@@ -208,7 +253,7 @@ export default function DocEditor({ id, ydoc: serverState, title: initialTitle, 
             <SaveStatus status={status} message={message} />
           </div>
           {isOwner ? (
-            <SharePanel docId={id} currentEmail={user.email} />
+            <SharePanel docId={id} currentEmail={user.email} onUnshared={() => void sessionRef.current?.live.rekey()} />
           ) : (
             <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 text-xs text-muted">Shared by {ownerName}</span>
           )}
@@ -225,7 +270,10 @@ export default function DocEditor({ id, ydoc: serverState, title: initialTitle, 
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            onFocus={() => (titleFocused.current = true)}
+            onFocus={() => {
+              titleFocused.current = true
+              titleAtFocus.current = title
+            }}
             onBlur={saveTitle}
             onKeyDown={onTitleKey}
             maxLength={TITLE_MAX}

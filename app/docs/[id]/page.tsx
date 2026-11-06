@@ -12,13 +12,14 @@ export default async function DocPage({ params }: { params: Promise<{ id: string
     if (res.error === 'not_found') notFound()
     throw new Error(res.message)
   }
-  const { doc, role, ownerName, ydoc } = res.value
+  const { doc, role, ownerName, ydoc, epoch } = res.value
 
   return (
     <DocEditor
       key={doc.id}
       id={doc.id}
       ydoc={ydoc}
+      epoch={epoch}
       title={doc.title}
       isOwner={role === 'owner'}
       ownerName={ownerName}

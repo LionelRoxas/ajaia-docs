@@ -27,6 +27,7 @@ export async function unshareDocument(repo: Repo, ownerId: string, docId: string
   const d = await ownedDoc(repo, ownerId, docId)
   if (!d.ok) return d
   await repo.removeShare(docId, userId)
+  await repo.bumpShareEpoch(docId) // open live channels move to a new topic the removed user can't join
   return { ok: true, value: null }
 }
 

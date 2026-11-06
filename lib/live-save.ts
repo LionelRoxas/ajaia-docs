@@ -17,6 +17,8 @@ export type LiveSaver = {
   hasUnsaved(): boolean
   /** Stops listening and cancels timers; an in-flight request still completes. */
   destroy(): void
+  /** Access is gone: drop pending work for good (no more requests, nothing reported unsaved). */
+  stop(): void
 }
 
 /**
@@ -111,12 +113,16 @@ export function createLiveSaver(opts: {
 
   const saver: LiveSaver = {
     flush: () => flush(true),
-    hasUnsaved: () => dirty || busy,
+    hasUnsaved: () => !stopped && (dirty || busy),
     destroy() {
       destroyed = true
       if (timer) clearTimeout(timer)
       timer = null
       ydoc.off('update', onUpdate)
+    },
+    stop() {
+      stopped = true
+      saver.destroy()
     },
   }
   return saver

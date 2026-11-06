@@ -39,6 +39,8 @@ function hookPageHide(win: EventTarget) {
 }
 if (typeof window !== 'undefined') hookPageHide(window)
 
+const HEAL_MS = 1500
+
 type AwarenessChange = { added: number[]; updated: number[]; removed: number[] }
 
 export function createLiveProvider(opts: {
@@ -47,9 +49,11 @@ export function createLiveProvider(opts: {
   awareness: Awareness
   onPeers?: (names: string[]) => void
   onStatus?: (status: string, err?: Error) => void
+  /** Origin for applied remote updates; pass one to keep it stable across rejoins. */
+  origin?: symbol
 }): LiveProvider {
   const { channel, ydoc, awareness, onPeers, onStatus } = opts
-  const origin = Symbol('live-provider')
+  const origin = opts.origin ?? Symbol('live-provider')
   let ready = false
   let destroyed = false
 
@@ -87,6 +91,28 @@ export function createLiveProvider(opts: {
 
   const sendSync = (reply?: boolean) => send('sync', { sv: toB64(Y.encodeStateVector(ydoc)), ...(reply ? { reply } : {}) })
 
+  // Self-heal resync, at most once per HEAL_MS; a trailing check asks again while still stuck.
+  const stuck = () => ydoc.store.pendingStructs !== null || ydoc.store.pendingDs !== null
+  let lastHeal = -Infinity
+  let healTimer: ReturnType<typeof setTimeout> | null = null
+  const healSync = () => {
+    if (healTimer || destroyed) return
+    const wait = lastHeal + HEAL_MS - Date.now()
+    if (wait > 0) {
+      healTimer = setTimeout(() => {
+        healTimer = null
+        if (stuck()) healSync()
+      }, wait)
+      return
+    }
+    lastHeal = Date.now()
+    sendSync()
+    healTimer = setTimeout(() => {
+      healTimer = null
+      if (stuck()) healSync()
+    }, HEAL_MS)
+  }
+
   // Malformed payloads are ignored: one bad message must not break the session.
   const handle = (event: string, cb: (p: Record<string, unknown>) => void) =>
     channel.on(event, (p) => {
@@ -102,7 +128,7 @@ export function createLiveProvider(opts: {
     if (typeof p.u !== 'string') return
     Y.applyUpdate(ydoc, fromB64(p.u), origin)
     // A gap (e.g. a dropped message) parks updates as pending: ask peers for what's missing.
-    if (ydoc.store.pendingStructs !== null || ydoc.store.pendingDs !== null) sendSync()
+    if (stuck()) healSync()
   })
   handle('sync', (p) => {
     if (typeof p.sv !== 'string') return
@@ -151,6 +177,7 @@ export function createLiveProvider(opts: {
     send,
     destroy() {
       if (destroyed) return
+      if (healTimer) clearTimeout(healTimer)
       pageHideHooks.delete(onPageHide)
       win?.removeEventListener('pageshow', onPageShow)
       ydoc.off('update', onDocUpdate)
@@ -168,8 +195,9 @@ export function createLiveProvider(opts: {
 // completes, so a quick rejoin (React Strict Mode, Back then reopen) would reuse a closing channel.
 const leaving = new Map<string, Promise<unknown>>()
 
-export function supabaseLiveChannel(client: SupabaseClient, docId: string): LiveChannel {
-  const topic = `doc:${docId}`
+/** Topic `doc:{id}:{epoch}`; the Realtime policy only admits current members on the current epoch. */
+export function supabaseLiveChannel(client: SupabaseClient, docId: string, epoch: number): LiveChannel {
+  const topic = `doc:${docId}:${epoch}`
   const handlers: [string, (payload: Record<string, unknown>) => void][] = []
   let ch: RealtimeChannel | null = null
   let closed = false

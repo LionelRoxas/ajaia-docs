@@ -12,7 +12,7 @@ const bob: Profile = { id: 'b', email: 'bob@demo.test', name: 'Bob' }
 const carol: Profile = { id: 'c', email: 'carol@demo.test', name: 'Carol' }
 const text = (t: string) => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: t }] }] })
 const welcome: DocRow = {
-  id: D1, owner_id: 'a', title: 'Welcome', content: text('hi'), ydoc: null, version: 1,
+  id: D1, owner_id: 'a', title: 'Welcome', content: text('hi'), ydoc: null, version: 1, share_epoch: 0,
   created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
 }
 

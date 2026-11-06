@@ -6,7 +6,16 @@ import type { Profile } from '@/lib/types'
 import { listSharesAction, shareAction, unshareAction } from '@/app/docs/[id]/actions'
 
 // Share state stays local to the panel: no route refresh, so the editor is never remounted mid-edit.
-export default function SharePanel({ docId, currentEmail }: { docId: string; currentEmail: string }) {
+export default function SharePanel({
+  docId,
+  currentEmail,
+  onUnshared,
+}: {
+  docId: string
+  currentEmail: string
+  /** After a successful removal: the editor moves the live channel to the new share epoch. */
+  onUnshared?: () => void
+}) {
   const [open, setOpen] = useState(false)
   const [people, setPeople] = useState<Profile[] | null>(null)
   const [email, setEmail] = useState('')
@@ -123,7 +132,9 @@ export default function SharePanel({ docId, currentEmail }: { docId: string; cur
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => run(() => unshareAction(docId, p.id))}
+                  onClick={async () => {
+                    if (await run(() => unshareAction(docId, p.id))) onUnshared?.()
+                  }}
                   aria-label={`Remove ${p.name}`}
                   className="rounded-md px-2 py-1 text-sm text-muted hover:bg-canvas hover:text-danger disabled:opacity-50"
                 >

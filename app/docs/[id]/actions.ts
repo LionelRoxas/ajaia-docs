@@ -2,7 +2,7 @@
 
 import { getUser } from '@/lib/auth'
 import { supabaseRepo } from '@/lib/repo'
-import { saveLiveUpdate, saveTitle } from '@/lib/live'
+import { getLiveEpoch, saveLiveUpdate, saveTitle } from '@/lib/live'
 import { listSharesFor, shareDocument, unshareDocument } from '@/lib/sharing'
 import type { Profile, Result } from '@/lib/types'
 
@@ -13,6 +13,13 @@ export async function saveLiveUpdateAction(input: { id: string; update: string }
   const user = await getUser()
   if (!user) return SESSION_EXPIRED
   return saveLiveUpdate(supabaseRepo(), user.id, input)
+}
+
+/** Live channel epoch + current title (after a rekey/title hint, or a channel error). */
+export async function getLiveEpochAction(id: string): Promise<Result<{ epoch: number; title: string }>> {
+  const user = await getUser()
+  if (!user) return SESSION_EXPIRED
+  return getLiveEpoch(supabaseRepo(), user.id, id)
 }
 
 export async function saveTitleAction(input: { id: string; title: string }): Promise<Result<{ title: string }>> {

@@ -14,6 +14,8 @@ export interface Repo {
   setYdocIfNull(id: string, ydoc: string): Promise<DocRow | null>
   addShare(docId: string, userId: string): Promise<void>
   removeShare(docId: string, userId: string): Promise<void>
+  /** Moves the doc's live channel to a new topic, so a removed user's open channel goes stale. */
+  bumpShareEpoch(docId: string): Promise<void>
 }
 
 // Implementation lives in repo.supabase.ts (server-only); tests import memoryRepo instead.

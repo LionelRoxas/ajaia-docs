@@ -15,7 +15,7 @@ export async function openLiveDocument(
   repo: Repo,
   id: string,
   userId: string,
-): Promise<Result<{ doc: DocRow; role: Role; ownerName: string; ydoc: string }>> {
+): Promise<Result<{ doc: DocRow; role: Role; ownerName: string; ydoc: string; epoch: number }>> {
   const a = await accessFor(repo, id, userId)
   if (!a) return notFound()
   let doc = a.doc
@@ -25,7 +25,14 @@ export async function openLiveDocument(
   }
   if (doc.ydoc === null) return fail('invalid', 'Document state unavailable')
   const owner = await repo.getProfile(doc.owner_id)
-  return { ok: true, value: { doc, role: a.role, ownerName: owner?.name ?? '', ydoc: doc.ydoc } }
+  return { ok: true, value: { doc, role: a.role, ownerName: owner?.name ?? '', ydoc: doc.ydoc, epoch: doc.share_epoch } }
+}
+
+/** Current live-channel epoch (topic `doc:{id}:{epoch}`) and title; not_found once access is gone. */
+export async function getLiveEpoch(repo: Repo, userId: string, id: string): Promise<Result<{ epoch: number; title: string }>> {
+  const a = await accessFor(repo, id, userId)
+  if (!a) return notFound()
+  return { ok: true, value: { epoch: a.doc.share_epoch, title: a.doc.title } }
 }
 
 export async function saveLiveUpdate(

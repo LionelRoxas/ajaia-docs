@@ -33,7 +33,7 @@ export function memoryRepo(seed: { profiles?: Profile[]; docs?: DocRow[]; shares
     },
     async insertDocument(ownerId, title, content: JSONContent) {
       const t = now()
-      const d: DocRow = { id: `mem-${++n}`, owner_id: ownerId, title, content, ydoc: null, version: 1, created_at: t, updated_at: t }
+      const d: DocRow = { id: `mem-${++n}`, owner_id: ownerId, title, content, ydoc: null, version: 1, share_epoch: 0, created_at: t, updated_at: t }
       d.content = structuredClone(content)
       docs.set(d.id, d)
       return structuredClone(d)
@@ -56,5 +56,6 @@ export function memoryRepo(seed: { profiles?: Profile[]; docs?: DocRow[]; shares
     },
     async addShare(docId, userId) { shares.add(`${docId}|${userId}`) },
     async removeShare(docId, userId) { shares.delete(`${docId}|${userId}`) },
+    async bumpShareEpoch(docId) { const d = docs.get(docId); if (d) d.share_epoch++ },
   }
 }

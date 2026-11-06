@@ -158,4 +158,16 @@ describe('createLiveSaver', () => {
     await s.saver.flush() // unmount flushes explicitly
     expect(s.serverText()).toBe('a')
   })
+
+  it('stop() drops pending work: nothing unsaved, nothing sent', async () => {
+    const s = setup()
+    s.type('a')
+    s.saver.stop()
+    expect(s.saver.hasUnsaved()).toBe(false)
+    await vi.advanceTimersByTimeAsync(5000)
+    await s.saver.flush()
+    s.type('b')
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(s.send).not.toHaveBeenCalled()
+  })
 })

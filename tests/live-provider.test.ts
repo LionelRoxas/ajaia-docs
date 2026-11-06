@@ -214,4 +214,40 @@ describe('createLiveProvider', () => {
       vi.unstubAllGlobals()
     }
   })
+
+  it('throttles the self-heal sync to one per 1.5 s, with a trailing retry while still stuck', async () => {
+    vi.useFakeTimers()
+    try {
+      const bus = createBus()
+      const b = peer(bus, 'Bob')
+      // Updates from a doc Bob never saw the start of: each one stays pending.
+      const src = new Y.Doc()
+      const ups: Uint8Array[] = []
+      src.on('update', (u: Uint8Array) => ups.push(u))
+      for (const ch of 'abcd') src.getText('t').insert(src.getText('t').length, ch)
+      const syncs = () => bus.sent.filter((m) => m.event === 'sync').length
+      const base = syncs()
+      for (const u of ups.slice(1)) bus.deliver(0, 'update', { u: Buffer.from(u).toString('base64') })
+      expect(b.ydoc.store.pendingStructs).not.toBeNull()
+      expect(syncs() - base).toBe(1)
+      await vi.advanceTimersByTimeAsync(1500)
+      expect(syncs() - base).toBe(2) // trailing: still stuck, ask again
+      Y.applyUpdate(b.ydoc, ups[0]) // gap filled
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(syncs() - base).toBe(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('uses a caller-supplied origin for remote updates', () => {
+    const bus = createBus()
+    const origin = Symbol('mine')
+    peer(bus, 'Alice')
+    const ydoc = new Y.Doc()
+    const awareness = new Awareness(ydoc)
+    const p = createLiveProvider({ channel: bus.channel(), ydoc, awareness, origin })
+    cleanups.push(() => (p.destroy(), awareness.destroy()))
+    expect(p.origin).toBe(origin)
+  })
 })

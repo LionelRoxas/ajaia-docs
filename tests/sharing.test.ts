@@ -12,7 +12,7 @@ const alice: Profile = { id: 'a', email: 'alice@demo.test', name: 'Alice' }
 const bob: Profile = { id: 'b', email: 'bob@demo.test', name: 'Bob' }
 const carol: Profile = { id: 'c', email: 'carol@demo.test', name: 'Carol' }
 const welcome: DocRow = {
-  id: D1, owner_id: 'a', title: 'Welcome', content: { type: 'doc', content: [{ type: 'paragraph' }] }, ydoc: null, version: 1,
+  id: D1, owner_id: 'a', title: 'Welcome', content: { type: 'doc', content: [{ type: 'paragraph' }] }, ydoc: null, version: 1, share_epoch: 0,
   created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
 }
 const seed = () => ({ profiles: [alice, bob, carol], docs: [{ ...welcome }], shares: [[D1, 'b']] as [string, string][] })
@@ -48,6 +48,18 @@ describe('sharing', () => {
   it('unshare removes access', async () => {
     expect(await unshareDocument(repo, 'a', D1, 'b')).toEqual({ ok: true, value: null })
     expect(await getDocumentFor(repo, D1, 'b')).toMatchObject({ ok: false, error: 'not_found' })
+  })
+  it('unshare bumps share_epoch; share does not', async () => {
+    await shareDocument(repo, 'a', D1, 'carol@demo.test')
+    expect((await repo.getDocument(D1))!.share_epoch).toBe(0)
+    await unshareDocument(repo, 'a', D1, 'b')
+    expect((await repo.getDocument(D1))!.share_epoch).toBe(1)
+    await unshareDocument(repo, 'a', D1, 'c')
+    expect((await repo.getDocument(D1))!.share_epoch).toBe(2)
+  })
+  it('failed unshare does not bump share_epoch', async () => {
+    await unshareDocument(repo, 'b', D1, 'b')
+    expect((await repo.getDocument(D1))!.share_epoch).toBe(0)
   })
   it('editor cannot unshare or list; stranger gets not_found', async () => {
     expect(await unshareDocument(repo, 'b', D1, 'b')).toMatchObject({ ok: false, error: 'forbidden' })
