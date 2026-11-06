@@ -54,6 +54,11 @@ Then:
 4. `npm run dev`, then open http://localhost:3000.
 5. `npm test` runs the unit tests (no database needed; they use an in-memory repo).
 
+## CI / deploy
+
+- GitHub Actions (`.github/workflows/ci.yml`) runs lint, typecheck, tests and a production build on every push to `main` and every pull request.
+- Vercel deploys `main` to production automatically; pull requests get preview deployments.
+
 ## Notes for reviewers
 
 - **Everyone shares one database.** You may see documents other reviewers made. There is no reset.
