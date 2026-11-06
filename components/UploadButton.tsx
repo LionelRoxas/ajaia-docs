@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState, useTransition, type ChangeEvent } from 'react'
+import { unstable_rethrow } from 'next/navigation'
 import { importDocumentAction } from '@/app/docs/actions'
 
 export default function UploadButton() {
@@ -16,8 +17,13 @@ export default function UploadButton() {
     fd.append('file', file)
     start(async () => {
       setError(null)
-      const res = await importDocumentAction(fd)
-      if (res) setError(res.error)
+      try {
+        const res = await importDocumentAction(fd)
+        if (res) setError(res.error)
+      } catch (err) {
+        unstable_rethrow(err) // let Next's own redirect signal through
+        setError('Upload failed. Try again.')
+      }
     })
   }
 

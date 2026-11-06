@@ -74,6 +74,7 @@ export default function DocEditor({ id, ydoc: serverState, epoch: initialEpoch, 
   const titleAtFocus = useRef(initialTitle)
   const remoteTitle = useRef<string | null>(null) // arrived while the field was focused
   const titleSaving = useRef(false)
+  const titleUnsaved = useRef(false) // typed but not yet blurred (so not saved); read on close
   const sessionRef = useRef<Session | null>(null)
 
   const report = (s: Status, m?: string) => {
@@ -170,8 +171,12 @@ export default function DocEditor({ id, ydoc: serverState, epoch: initialEpoch, 
   }, [stopped, editor])
 
   useEffect(() => {
+    titleUnsaved.current = !stopped && (title.trim() || DEFAULT_TITLE) !== savedTitle.current
+  }, [title, stopped])
+
+  useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
-      if (!sessionRef.current?.saver.hasUnsaved() && !titleSaving.current) return
+      if (!sessionRef.current?.saver.hasUnsaved() && !titleSaving.current && !titleUnsaved.current) return
       e.preventDefault()
       e.returnValue = '' // older browsers need this to show the prompt
     }

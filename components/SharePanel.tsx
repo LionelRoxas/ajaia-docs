@@ -34,7 +34,8 @@ export default function SharePanel({
 
   useEffect(() => {
     if (!open) return
-    void refresh() // eslint-disable-line react-hooks/set-state-in-effect -- fetch on open
+    setError(undefined) // eslint-disable-line react-hooks/set-state-in-effect -- a stale error from last time
+    void refresh() // fetch on open
     input.current?.focus()
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
