@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { safeNext } from '@/lib/auth-redirect'
+import { safeNext, isPageNavigation } from '@/lib/auth-redirect'
 
 describe('safeNext', () => {
   it('allows same-origin paths only', () => {
@@ -26,5 +26,18 @@ describe('safeNext', () => {
 
   it('keeps path, search and hash', () => {
     expect(safeNext('/docs/abc?x=1#h')).toBe('/docs/abc?x=1#h')
+  })
+})
+
+describe('isPageNavigation', () => {
+  const h = (o: Record<string, string> = {}) => new Headers(o)
+  it('is true for plain GET/HEAD page loads', () => {
+    expect(isPageNavigation('GET', h())).toBe(true)
+    expect(isPageNavigation('HEAD', h())).toBe(true)
+  })
+  it('is false for Server Actions and other methods, so they reach their own auth check', () => {
+    expect(isPageNavigation('POST', h({ 'next-action': 'abc' }))).toBe(false)
+    expect(isPageNavigation('GET', h({ 'Next-Action': 'abc' }))).toBe(false)
+    expect(isPageNavigation('POST', h())).toBe(false)
   })
 })

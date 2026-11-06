@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { safeNext } from '@/lib/auth-redirect'
+import { isPageNavigation, safeNext } from '@/lib/auth-redirect'
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request })
@@ -26,6 +26,7 @@ export async function proxy(request: NextRequest) {
     response.cookies.getAll().forEach((c) => res.cookies.set(c))
     return res
   }
+  if (!isPageNavigation(request.method, request.headers)) return response
   // Signed-out visitors to a doc come back to it after signing in.
   if (!data.user && pathname.startsWith('/docs')) {
     return redirectTo(`/?next=${encodeURIComponent(pathname + request.nextUrl.search)}`)

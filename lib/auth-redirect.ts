@@ -14,3 +14,9 @@ export function safeNext(raw: string | null | undefined): string {
   const out = u.pathname + u.search + u.hash
   return out.startsWith('//') ? '/docs' : out
 }
+
+// The proxy only redirects page loads. Server Actions (POST with a next-action header) must reach
+// their own getUser() and return `unauthorized`, or the client gets an HTML redirect it can't use.
+export function isPageNavigation(method: string, headers: Headers): boolean {
+  return (method === 'GET' || method === 'HEAD') && !headers.has('next-action')
+}
