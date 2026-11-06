@@ -55,6 +55,10 @@ export function memoryRepo(seed: { profiles?: Profile[]; docs?: DocRow[]; shares
       return structuredClone(d)
     },
     async addShare(docId, userId) { shares.add(`${docId}|${userId}`) },
+    async deleteDocument(id) {
+      docs.delete(id)
+      for (const s of [...shares]) if (s.startsWith(`${id}|`)) shares.delete(s)
+    },
     async unshare(docId, userId) {
       const d = docs.get(docId)
       if (!d) return null

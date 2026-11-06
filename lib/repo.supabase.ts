@@ -70,6 +70,9 @@ export function supabaseRepo(db: SupabaseClient = createAdminClient()): Repo {
     async addShare(docId, userId) {
       check(await db.from('document_shares').upsert({ document_id: docId, user_id: userId }, { onConflict: 'document_id,user_id', ignoreDuplicates: true }))
     },
+    async deleteDocument(id) {
+      check(await db.from('documents').delete().eq('id', id)) // document_shares cascades
+    },
     async unshare(docId, userId) {
       // One transaction in Postgres (0005_unshare_atomic.sql); service role only.
       return check(await db.rpc('unshare_document', { doc: docId, target: userId })) as number | null

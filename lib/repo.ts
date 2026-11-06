@@ -17,6 +17,8 @@ export interface Repo {
    * Removes the share and bumps share_epoch in one step, moving the doc's live channel to a new
    * topic so a removed user's open channel goes stale. Returns the old epoch, or null if no doc.
    */
+  /** Removes the document; its shares go with it (FK cascade). */
+  deleteDocument(id: string): Promise<void>
   unshare(docId: string, userId: string): Promise<number | null>
 }
 

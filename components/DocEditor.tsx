@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import Collaboration from '@tiptap/extension-collaboration'
@@ -27,6 +28,7 @@ import Toolbar from './Toolbar'
 import SaveStatus from './SaveStatus'
 import SharePanel from './SharePanel'
 import Presence from './Presence'
+import DeleteDocumentButton from './DeleteDocumentButton'
 
 // Peer carets: color limited to our palette, name inserted as text.
 type CaretUser = { name?: unknown; color?: unknown }
@@ -61,6 +63,7 @@ type Props = {
 }
 
 export default function DocEditor({ id, ydoc: serverState, epoch: initialEpoch, title: initialTitle, isOwner, ownerName, user }: Props) {
+  const router = useRouter()
   const [status, setStatus] = useState<Status>('idle')
   const [message, setMessage] = useState<string>()
   const [stopped, setStopped] = useState(false)
@@ -262,7 +265,17 @@ export default function DocEditor({ id, ydoc: serverState, epoch: initialEpoch, 
             <SaveStatus status={status} message={message} />
           </div>
           {isOwner ? (
-            <SharePanel docId={id} currentEmail={user.email} onUnshared={() => void sessionRef.current?.live.rekey()} />
+            <div className="flex shrink-0 items-center gap-1">
+              <DeleteDocumentButton
+                docId={id}
+                title={title}
+                onDeleted={() => {
+                  sessionRef.current?.saver.stop() // nothing left to save
+                  router.push('/docs')
+                }}
+              />
+              <SharePanel docId={id} currentEmail={user.email} onUnshared={() => void sessionRef.current?.live.rekey()} />
+            </div>
           ) : (
             <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 text-xs text-muted">Shared by {ownerName}</span>
           )}
