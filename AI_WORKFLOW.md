@@ -5,6 +5,7 @@
 - **Claude Code** with the superpowers skills: brainstorming, a written spec, a written plan, then subagent-driven development. Each task was built by a fresh AI implementer, then checked by a separate AI review gate that saw only the brief and the diff.
 - An automated security review on every commit.
 - Supabase, GitHub and Playwright MCP servers. Features were also checked live in a browser on a local dev server.
+- **Walkthrough video:** recorded by an automated Playwright run on the live site and narrated by an AI voice (ElevenLabs). The video says so in its first line. The script content and every decision in it are mine.
 
 ## Where AI sped things up
 

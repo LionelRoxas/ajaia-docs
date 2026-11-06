@@ -1,7 +1,7 @@
 # Submission
 
 **Live URL:** https://ajaia-docs-lac-psi.vercel.app
-**Video (3-5 min):** see `VIDEO_URL.txt` (VIDEO_URL_TBD)
+**Video (3:11):** https://youtu.be/vvMI8TDDxUQ (also in `VIDEO_URL.txt`)
 
 ## Demo credentials
 
@@ -24,6 +24,7 @@ docs/REVIEW_LOG.md     review findings and decisions
 docs/superpowers/      design spec and implementation plan
 app/  components/  lib/  tests/  scripts/   source
 public/ajaia-logo.png  logo
+.github/workflows/     CI (lint, typecheck, tests, build)
 supabase/migrations/   0001_init, 0002_ydoc, 0003_realtime_access, 0004_share_epoch, 0005_unshare_atomic
 package.json  package-lock.json  .env.example  .gitignore  .mcp.json  vercel.json
 next.config.ts  proxy.ts  tsconfig.json  vitest.config.mts
@@ -40,7 +41,7 @@ eslint.config.mjs  postcss.config.mjs
 - Live co-editing with named carets and presence; unsharing cuts a user off within seconds.
 - Real sign-in and sign-up, plus one-click demo accounts.
 - Owner-only delete (peers on the doc are cut off within seconds).
-- 111 automated tests.
+- 111 automated tests; CI runs lint, typecheck, tests and a build on every push and PR; merges to `main` deploy to Vercel.
 
 ## Incomplete
 
