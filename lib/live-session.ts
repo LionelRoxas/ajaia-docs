@@ -12,6 +12,8 @@ export interface LiveSession {
   readonly origin: symbol
   readonly epoch: number
   send(event: string, payload: Record<string, unknown>): void
+  /** The server reported this epoch (e.g. in a save result): move there if it is newer. */
+  noteEpoch(epoch: number): void
   /** Owner, after a successful unshare: tell the old topic, then move to the new epoch. */
   rekey(): Promise<void>
   destroy(): void
@@ -127,6 +129,9 @@ export function createLiveSession(opts: {
       return epoch
     },
     send: (event, payload) => provider.send(event, payload),
+    noteEpoch(e) {
+      if (!ended && e > epoch) rejoin(e)
+    },
     async rekey() {
       if (ended) return
       provider.send('rekey', {})

@@ -117,7 +117,11 @@ export default function DocEditor({ id, ydoc: serverState, epoch: initialEpoch, 
     const saver = createLiveSaver({
       ydoc,
       isRemote: (o) => o === live.origin,
-      send: (update) => saveLiveUpdateAction({ id, update }),
+      send: async (update) => {
+        const res = await saveLiveUpdateAction({ id, update })
+        if (res.ok) live.noteEpoch(res.value.epoch) // unshared elsewhere: move to the new topic
+        return res
+      },
       onStatus: (s, m) => reportRef.current(s, m),
     })
     const s = { ydoc, live, saver }

@@ -39,7 +39,7 @@ export async function saveLiveUpdate(
   repo: Repo,
   userId: string,
   input: { id: string; update: string },
-): Promise<Result<{ version: number }>> {
+): Promise<Result<{ version: number; epoch: number }>> {
   let incoming: Uint8Array
   try {
     incoming = fromB64(input.update)
@@ -59,7 +59,7 @@ export async function saveLiveUpdate(
     }
     if (compact.state.length > YDOC_MAX_BYTES || contentTooBig(compact.json)) return fail('invalid', TOO_BIG)
     const updated = await repo.updateIfVersion(input.id, a.doc.version, { content: compact.json, ydoc: toB64(compact.state) })
-    if (updated) return { ok: true, value: { version: updated.version } }
+    if (updated) return { ok: true, value: { version: updated.version, epoch: updated.share_epoch } } // epoch: rejoin hint
   }
   return fail('conflict', 'Could not save right now. Try again.')
 }

@@ -46,7 +46,8 @@ describe('sharing', () => {
     expect(await shareDocument(repo, 'a', D1, 'bob@demo.test')).toEqual({ ok: false, error: 'invalid', message: 'Already shared with this user' })
   })
   it('unshare removes access', async () => {
-    expect(await unshareDocument(repo, 'a', D1, 'b')).toEqual({ ok: true, value: null })
+    // Returns the epoch the removed user was on, so the caller can tell that topic to rekey.
+    expect(await unshareDocument(repo, 'a', D1, 'b')).toEqual({ ok: true, value: { previousEpoch: 0 } })
     expect(await getDocumentFor(repo, D1, 'b')).toMatchObject({ ok: false, error: 'not_found' })
   })
   it('unshare bumps share_epoch; share does not', async () => {

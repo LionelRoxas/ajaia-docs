@@ -138,6 +138,21 @@ describe('createLiveSession', () => {
     expect([...a.awareness.getStates().keys()]).toEqual([a.awareness.clientID])
   })
 
+  it('rejoins when a save reports a newer epoch (no rekey received)', async () => {
+    w = world()
+    const a = w.join('alice')
+    const c = w.join('carol')
+    w.server.members.delete('bob')
+    w.server.epoch = 1 // unshared from elsewhere; nobody broadcast rekey
+    a.session.noteEpoch(1)
+    c.session.noteEpoch(1)
+    expect(a.session.epoch).toBe(1)
+    a.type('after')
+    expect(c.text()).toBe('after')
+    a.session.noteEpoch(0) // stale report: ignored
+    expect(a.session.epoch).toBe(1)
+  })
+
   it('keeps one origin across rejoins', async () => {
     w = world()
     const a = w.join('alice')

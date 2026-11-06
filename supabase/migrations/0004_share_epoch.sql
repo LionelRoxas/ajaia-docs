@@ -14,13 +14,11 @@ $$;
 revoke execute on function public.can_join_doc(uuid, int) from public, anon;
 grant execute on function public.can_join_doc(uuid, int) to authenticated;
 
-drop policy if exists "doc members receive broadcasts" on realtime.messages;
-drop policy if exists "doc members send broadcasts" on realtime.messages;
-
 -- case guarantees the casts only run on a well-formed topic: doc:<uuid>:<1-9 digits>
 -- (9 digits always fits in int).
-create policy "doc members receive broadcasts"
-on realtime.messages for select to authenticated
+-- Policies from 0003, altered in place (same names, roles and commands).
+alter policy "doc members receive broadcasts"
+on realtime.messages
 using (
   realtime.messages.extension in ('broadcast')
   and case
@@ -33,8 +31,8 @@ using (
   end
 );
 
-create policy "doc members send broadcasts"
-on realtime.messages for insert to authenticated
+alter policy "doc members send broadcasts"
+on realtime.messages
 with check (
   realtime.messages.extension in ('broadcast')
   and case

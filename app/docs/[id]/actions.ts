@@ -4,12 +4,13 @@ import { getUser } from '@/lib/auth'
 import { supabaseRepo } from '@/lib/repo'
 import { getLiveEpoch, saveLiveUpdate, saveTitle } from '@/lib/live'
 import { listSharesFor, shareDocument, unshareDocument } from '@/lib/sharing'
+import { broadcastRekey } from '@/lib/live-notify'
 import type { Profile, Result } from '@/lib/types'
 
 const SESSION_EXPIRED = { ok: false as const, error: 'unauthorized' as const, message: 'Your session expired. Sign in again.' }
 
 /** Merges a base64 Yjs update into the stored document state. */
-export async function saveLiveUpdateAction(input: { id: string; update: string }): Promise<Result<{ version: number }>> {
+export async function saveLiveUpdateAction(input: { id: string; update: string }): Promise<Result<{ version: number; epoch: number }>> {
   const user = await getUser()
   if (!user) return SESSION_EXPIRED
   return saveLiveUpdate(supabaseRepo(), user.id, input)
@@ -37,7 +38,15 @@ export async function shareAction(docId: string, email: string): Promise<Result<
 export async function unshareAction(docId: string, userId: string): Promise<Result<null>> {
   const user = await getUser()
   if (!user) return SESSION_EXPIRED
-  return unshareDocument(supabaseRepo(), user.id, docId, userId)
+  const r = await unshareDocument(supabaseRepo(), user.id, docId, userId)
+  if (!r.ok) return r
+  try {
+    await broadcastRekey(docId, r.value.previousEpoch)
+  } catch (e) {
+    // Not fatal: peers also learn the new epoch from their next save result.
+    console.error('rekey broadcast failed', e)
+  }
+  return { ok: true, value: null }
 }
 
 export async function listSharesAction(docId: string): Promise<Result<Profile[]>> {

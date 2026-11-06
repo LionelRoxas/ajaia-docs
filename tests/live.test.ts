@@ -58,6 +58,19 @@ describe('live', () => {
     expect(s.match(/BBB/g)).toHaveLength(1)
     expect(s.match(/hi/g)).toHaveLength(1)
   })
+  it('a save reports the current share epoch', async () => {
+    const o = await openLiveDocument(repo, D1, 'a')
+    if (!o.ok) throw new Error('open')
+    expect(await saveLiveUpdate(repo, 'a', { id: D1, update: addParagraph(fromB64(o.value.ydoc), 'x') })).toMatchObject({
+      ok: true,
+      value: { epoch: 0 },
+    })
+    await repo.bumpShareEpoch(D1)
+    expect(await saveLiveUpdate(repo, 'a', { id: D1, update: addParagraph(fromB64(o.value.ydoc), 'y') })).toMatchObject({
+      ok: true,
+      value: { epoch: 1 },
+    })
+  })
   it('stranger cannot save', async () => {
     const o = await openLiveDocument(repo, D1, 'a')
     if (!o.ok) throw new Error('open')

@@ -23,12 +23,17 @@ export async function shareDocument(repo: Repo, ownerId: string, docId: string, 
   return { ok: true, value: target }
 }
 
-export async function unshareDocument(repo: Repo, ownerId: string, docId: string, userId: string): Promise<Result<null>> {
+export async function unshareDocument(
+  repo: Repo,
+  ownerId: string,
+  docId: string,
+  userId: string,
+): Promise<Result<{ previousEpoch: number }>> {
   const d = await ownedDoc(repo, ownerId, docId)
   if (!d.ok) return d
   await repo.removeShare(docId, userId)
   await repo.bumpShareEpoch(docId) // open live channels move to a new topic the removed user can't join
-  return { ok: true, value: null }
+  return { ok: true, value: { previousEpoch: d.value.share_epoch } }
 }
 
 export async function listSharesFor(repo: Repo, userId: string, docId: string): Promise<Result<Profile[]>> {
