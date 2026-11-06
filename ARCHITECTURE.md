@@ -15,14 +15,15 @@ Browser (Tiptap + Yjs)
 
 | Decision | Why |
 |---|---|
-| All data access is server-side; the browser only holds auth cookies. RLS is on with no table policies. | One place enforces access; the public key can read nothing. |
+| All table reads and writes are server-side. The browser's only direct Supabase link is Realtime, joined with its own JWT. RLS is on with no table policies. | One place enforces access; the public key can read no tables. |
 | `Repo` interface + `memoryRepo` | Business rules are tested fast, without a database. |
 | Yjs CRDT, not Google's operational transform | OT needs a central always-on transform server, and Vercel cannot hold connections. A CRDT merges anywhere, so Supabase only relays and Postgres stores. |
 | Save = merge into stored Yjs state, then compact | Merges are idempotent, so retries and duplicates are safe. Compaction drops deleted text. Caps: 2 MB state, 1 MB derived content. Malformed updates, or ones that reference missing data, are rejected. |
-| Share epoch in the channel name (`doc:{id}:{epoch}`) | Unsharing bumps the epoch and tells peers to rejoin on the new topic; the removed user cannot follow. |
+| Share epoch in the channel name (`doc:{id}:{epoch}`) | Unsharing removes the share and bumps the epoch in one SQL function, then tells peers to rejoin on the new topic; the removed user cannot follow. |
 | RLS on `realtime.messages` | Only the owner or a shared user, at the current epoch, can join or send on a doc channel. Checked in SQL as each user. |
 | Demo auth on real Supabase Auth | Same code path as real users; the one-click buttons just sign in server-side. |
 | `content` JSON kept beside `ydoc` | The list, import and fallback do not need to decode Yjs. |
+| `.docx` import limits | At most 200 zip entries and 10 MB unzipped (checked while streaming), and 3 MB of HTML, so a small file can't expand into a huge one. |
 | Version-checked writes on save | A save writes only if the row is unchanged since read, retrying a few times, so concurrent saves cannot overwrite each other. |
 | No Redis | Not needed at this scale. |
 
@@ -36,5 +37,4 @@ Browser (Tiptap + Yjs)
 | Sign-up skips email verification (demo choice). | Supabase sign-up with confirmation and rate limiting. |
 | "No user with that email" tells an owner whether an account exists. | Invite flow with a generic reply. |
 | Reviewers share one database. | Per-reviewer or per-tenant data. |
-| A crafted `.docx` can expand a lot when unzipped; the 1 MB cap is on the compressed file only. Not yet fixed. | Check unzipped size before converting. |
 | No offline support. | Persist the Yjs doc locally (IndexedDB). |

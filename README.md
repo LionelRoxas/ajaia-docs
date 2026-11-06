@@ -48,7 +48,7 @@ cp .env.example .env.local     # fill in the four values below
 
 Then:
 
-1. In the Supabase SQL editor, run `supabase/migrations/0001_init.sql`, `0002_ydoc.sql`, `0003_realtime_access.sql`, `0004_share_epoch.sql`, in that order.
+1. In the Supabase SQL editor, run `supabase/migrations/0001_init.sql`, `0002_ydoc.sql`, `0003_realtime_access.sql`, `0004_share_epoch.sql`, `0005_unshare_atomic.sql`, in that order.
 2. In Supabase Realtime settings, turn off "Allow public access" so only the private-channel policies apply.
 3. `npm run seed` creates Alice, Bob, Carol and the Welcome document (safe to re-run).
 4. `npm run dev`, then open http://localhost:3000.

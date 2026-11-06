@@ -19,16 +19,18 @@ ARCHITECTURE.md        design, decisions, known limitations
 AI_WORKFLOW.md         how AI was used and checked
 SUBMISSION.md          this file
 VIDEO_URL.txt          walkthrough link
+AGENTS.md              notes for AI coding agents (Next.js 16)
 docs/REVIEW_LOG.md     review findings and decisions
 docs/superpowers/      design spec and implementation plan
-app/  components/  lib/  tests/  scripts/  public/   source
-supabase/migrations/   0001_init, 0002_ydoc, 0003_realtime_access, 0004_share_epoch
-package.json  package-lock.json  .env.example  vercel.json
+app/  components/  lib/  tests/  scripts/   source
+public/ajaia-logo.png  logo
+supabase/migrations/   0001_init, 0002_ydoc, 0003_realtime_access, 0004_share_epoch, 0005_unshare_atomic
+package.json  package-lock.json  .env.example  .gitignore  .mcp.json  vercel.json
 next.config.ts  proxy.ts  tsconfig.json  vitest.config.mts
 eslint.config.mjs  postcss.config.mjs
 ```
 
-(No `.env.local`, `node_modules` or `.next`.)
+(No `.env.local`, `node_modules`, `.next` or `.vercel`.)
 
 ## What works
 
@@ -37,13 +39,12 @@ eslint.config.mjs  postcss.config.mjs
 - Share by email (owner only), unshare, "My documents" vs "Shared with me".
 - Live co-editing with named carets and presence; unsharing cuts a user off within seconds.
 - Real sign-in and sign-up, plus one-click demo accounts.
-- 100 automated tests.
+- 107 automated tests.
 
 ## Incomplete
 
 - Title is last-write-wins; presence names are not identity-bound.
 - Sign-up has no email verification; sharing reveals whether an account exists.
-- `.docx` unzipped size is not checked.
 - No delete, version history, roles, offline, or share emails.
 
 Details and fixes: [ARCHITECTURE.md](ARCHITECTURE.md#known-limitations).
@@ -51,8 +52,6 @@ Details and fixes: [ARCHITECTURE.md](ARCHITECTURE.md#known-limitations).
 ## Next 2-4 hours
 
 1. Email on share via a verified sending domain.
-2. Version history.
-3. Delete documents.
-4. Roles beyond editor (viewer).
-5. Identity-bound presence.
-6. Offline support.
+2. Delete documents.
+3. View-only role.
+4. Identity-bound presence.

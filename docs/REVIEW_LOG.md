@@ -14,7 +14,7 @@ How each change was checked before it was accepted, what the checks caught, and 
 
 | # | Area | Problem | Fix | Proof |
 |---|---|---|---|---|
-| 1 | Auth | A signed-in user with no profile row looped forever between `/` and `/docs`. | Profile falls back to the auth user's id, email and name. | Deleted a profile row, reloaded: no loop. |
+| 1 | Auth | A signed-in user with no profile row looped forever between `/` and `/docs`. | Profile row is recreated from the auth user's id, email and name. | Deleted a profile row, reloaded: no loop. |
 | 2 | Auth form | Switching to sign-up while a sign-in was in flight showed a stale error. | Toggle and demo buttons disabled while pending; error cleared on each attempt. | Browser check. |
 | 3 | Auth form | A failed sign-in wiped what the user typed. | Form submit no longer resets fields. | Browser check. |
 | 4 | Sign-up | Any 422 from Supabase was reported as "account already exists" (e.g. a weak password). | Match on the `email_exists` error code only. | Live duplicate-email check. |
@@ -34,7 +34,6 @@ How each change was checked before it was accepted, what the checks caught, and 
 
 ## Non-blocking fixes made along the way
 
-- Clipboard failure on **Copy my text** shows an inline message instead of failing silently.
 - Leave-page warning works in older browsers too.
 - In-memory test repository deep-copies data so tests can't pass by accident.
 - Removed non-default Next.js flags that would have broken cookie-based auth pages.
@@ -46,13 +45,13 @@ How each change was checked before it was accepted, what the checks caught, and 
 |---|---|
 | Sign-up skips email verification. | **Accepted for the demo.** Verification would block reviewers. Production: Supabase sign-up with confirmation and rate limiting. |
 | Share box says "No user with that email" (lets owners check if an account exists). | **Accepted.** Only signed-in owners see it; needed for usable sharing. Production: invite flow with a generic reply. |
-| A small `.docx` could expand hugely when unzipped. | **Open.** Bounded to one function invocation; planned fix is to check unzipped size before converting. Listed as a known limitation. |
+| A small `.docx` could expand hugely when unzipped. | **Fixed.** Max 200 entries and 10 MB unzipped (checked while streaming), 3 MB HTML. Tests build a zip bomb in-test. |
 | Open redirect in `next`. | **Fixed** (row 6). |
 | Yjs: unbounded stored state, deleted text kept (Task 11). | **Fixed** (rows 9, 11). Rebuilding state from JSON was **rejected**: it breaks CRDT identity for connected clients. |
 | Unshared user keeps receiving and, via peers' saves, writing (Task 12-13, rated High). | **Fixed** with share-epoch rotation and server-side rekey (rows 12-13). I first meant to document it; the review showed it was wider than the spec said. |
 | Presence name spoofing between collaborators. | **Accepted.** Only authorized collaborators can send; worst case is a fake caret name. Production: bind to identity. |
 | Private channels need Realtime "Allow public access" off. | **Owner step**, in the README; confirm and test a public join is refused before deploy. |
-| Concurrent unshares could rekey the wrong topic (low impact; peers still catch up from save responses). | **Open.** Planned: atomic epoch bump returning the old value. |
+| Concurrent unshares could rekey the wrong topic (low impact; peers still catch up from save responses). | **Fixed.** `unshare_document` SQL function deletes the share and bumps the epoch in one transaction, returning the old epoch. Service role only. |
 
 ## Verified safe (no change needed)
 
@@ -69,9 +68,16 @@ How each change was checked before it was accepted, what the checks caught, and 
 - Added real auth on top of one-click demo accounts.
 - Deferred share-notification emails (demo inboxes aren't real; would need a verified sending domain) and built return-to-doc after sign-in instead.
 
+## Final whole-branch review fixes
+
+- Live session rejoins only on a newer epoch, so a stale reply can't move it back.
+- The proxy no longer redirects Server Actions, so an expired session gets the "session expired" read-only state instead of a broken redirect.
+- Live saves check the base64 size against the request limit, so a large doc shows "Document is too large".
+- A missing profile row is recreated on sign-in, so that user can create documents.
+- A failed upload shows "Upload failed. Try again." inline.
+- Closing the tab warns about a typed but unsaved title.
+
 ## Still open (minor, logged)
 
-- Atomic unshare + epoch bump in one SQL function; rejoin only when the epoch increases.
-- `.docx` unzipped-size check.
 - Title hint is bounded but not rate-limited; self-heal retries every 1.5 s indefinitely.
 - Stuck-pending saves give a generic message until resync; unmount flush failure is silent.
