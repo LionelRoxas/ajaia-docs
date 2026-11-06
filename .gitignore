@@ -48,3 +48,6 @@ next-env.d.ts
 .vercel
 .env*
 !.env.example
+
+# walkthrough recording assets (link is in VIDEO_URL.txt)
+/video/
