@@ -2,6 +2,7 @@
 
 **Live URL:** https://ajaia-docs-lac-psi.vercel.app
 **Video (3:11):** https://youtu.be/vvMI8TDDxUQ (also in `VIDEO_URL.txt`)
+**Source code:** https://github.com/LionelRoxas/ajaia-docs
 
 ## Demo credentials
 
