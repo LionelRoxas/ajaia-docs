@@ -162,3 +162,30 @@ describe('createLiveSession', () => {
     expect(a.session.origin).toBe(before)
   })
 })
+
+describe('createLiveSession epoch direction', () => {
+  it('a stale fetch with a lower epoch does not move the session back', async () => {
+    const ydoc = new Y.Doc()
+    const awareness = new Awareness(ydoc)
+    const topics: number[] = []
+    let release!: (r: Result<{ epoch: number; title: string }>) => void
+    const session = createLiveSession({
+      ydoc,
+      awareness,
+      epoch: 0,
+      channelFor: (e) => {
+        topics.push(e)
+        return { send() {}, on() {}, subscribe(cb) { cb('SUBSCRIBED') }, unsubscribe() {} }
+      },
+      fetchLive: () => new Promise((r) => (release = r)),
+    })
+    const pending = session.rekey() // fetch in flight; it answers epoch 1 after we already moved to 2
+    session.noteEpoch(2)
+    release({ ok: true, value: { epoch: 1, title: 'x' } })
+    await pending
+    expect(session.epoch).toBe(2)
+    expect(topics).toEqual([0, 2])
+    session.destroy()
+    awareness.destroy()
+  })
+})

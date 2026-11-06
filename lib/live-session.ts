@@ -22,7 +22,7 @@ export interface LiveSession {
 /**
  * A live connection that follows the doc's share epoch (topic `doc:{id}:{epoch}`).
  * `rekey` broadcasts, `title` broadcasts and CHANNEL_ERROR all make it re-ask the server:
- * a new epoch means rejoin on the new topic with the same Y.Doc and awareness (the provider's
+ * a newer epoch means rejoin on the new topic with the same Y.Doc and awareness (the provider's
  * sync brings both sides up to date); not_found/unauthorized means access is gone.
  * Payloads are never trusted: a title broadcast only triggers a fetch of the real title.
  */
@@ -113,7 +113,7 @@ export function createLiveSession(opts: {
           return
         }
         if (withTitle) onTitle?.(res.value.title)
-        if (res.value.epoch !== epoch) rejoin(res.value.epoch)
+        if (res.value.epoch > epoch) rejoin(res.value.epoch) // a stale (lower) answer never moves us back
       } while (again && !ended)
     } finally {
       running = false
