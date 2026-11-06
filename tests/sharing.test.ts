@@ -58,6 +58,18 @@ describe('sharing', () => {
     await unshareDocument(repo, 'a', D1, 'c')
     expect((await repo.getDocument(D1))!.share_epoch).toBe(2)
   })
+  it('repo.unshare removes the share and returns the pre-bump epoch', async () => {
+    await shareDocument(repo, 'a', D1, 'carol@demo.test')
+    expect(await repo.unshare(D1, 'b')).toBe(0)
+    expect(await repo.unshare(D1, 'c')).toBe(1)
+    expect(await repo.getSharedUserIds(D1)).toEqual([])
+    expect(await repo.unshare(MISSING, 'b')).toBeNull()
+  })
+  it('sequential unshares report previousEpoch 0 then 1', async () => {
+    await shareDocument(repo, 'a', D1, 'carol@demo.test')
+    expect(await unshareDocument(repo, 'a', D1, 'b')).toEqual({ ok: true, value: { previousEpoch: 0 } })
+    expect(await unshareDocument(repo, 'a', D1, 'c')).toEqual({ ok: true, value: { previousEpoch: 1 } })
+  })
   it('failed unshare does not bump share_epoch', async () => {
     await unshareDocument(repo, 'b', D1, 'b')
     expect((await repo.getDocument(D1))!.share_epoch).toBe(0)

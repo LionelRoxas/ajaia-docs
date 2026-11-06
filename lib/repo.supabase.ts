@@ -70,21 +70,9 @@ export function supabaseRepo(db: SupabaseClient = createAdminClient()): Repo {
     async addShare(docId, userId) {
       check(await db.from('document_shares').upsert({ document_id: docId, user_id: userId }, { onConflict: 'document_id,user_id', ignoreDuplicates: true }))
     },
-    async removeShare(docId, userId) {
-      check(await db.from('document_shares').delete().eq('document_id', docId).eq('user_id', userId))
-    },
-    async bumpShareEpoch(docId) {
-      // Compare-and-set increment (no RPC needed); leaves version/updated_at alone so saves aren't disturbed.
-      for (let attempt = 0; attempt < 5; attempt++) {
-        const cur = check(await db.from('documents').select('share_epoch').eq('id', docId).maybeSingle<{ share_epoch: number }>())
-        if (!cur) return
-        const done = check(
-          await db.from('documents').update({ share_epoch: cur.share_epoch + 1 })
-            .eq('id', docId).eq('share_epoch', cur.share_epoch).select('id').maybeSingle(),
-        )
-        if (done) return
-      }
-      throw new Error('Could not update share epoch')
+    async unshare(docId, userId) {
+      // One transaction in Postgres (0005_unshare_atomic.sql); service role only.
+      return check(await db.rpc('unshare_document', { doc: docId, target: userId })) as number | null
     },
   }
 }

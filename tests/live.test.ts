@@ -65,7 +65,7 @@ describe('live', () => {
       ok: true,
       value: { epoch: 0 },
     })
-    await repo.bumpShareEpoch(D1)
+    await repo.unshare(D1, 'b')
     expect(await saveLiveUpdate(repo, 'a', { id: D1, update: addParagraph(fromB64(o.value.ydoc), 'y') })).toMatchObject({
       ok: true,
       value: { epoch: 1 },

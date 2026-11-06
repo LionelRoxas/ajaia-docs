@@ -13,9 +13,11 @@ export interface Repo {
   updateIfVersion(id: string, expectedVersion: number, patch: { title?: string; content?: JSONContent; ydoc?: string }): Promise<DocRow | null>
   setYdocIfNull(id: string, ydoc: string): Promise<DocRow | null>
   addShare(docId: string, userId: string): Promise<void>
-  removeShare(docId: string, userId: string): Promise<void>
-  /** Moves the doc's live channel to a new topic, so a removed user's open channel goes stale. */
-  bumpShareEpoch(docId: string): Promise<void>
+  /**
+   * Removes the share and bumps share_epoch in one step, moving the doc's live channel to a new
+   * topic so a removed user's open channel goes stale. Returns the old epoch, or null if no doc.
+   */
+  unshare(docId: string, userId: string): Promise<number | null>
 }
 
 // Implementation lives in repo.supabase.ts (server-only); tests import memoryRepo instead.
