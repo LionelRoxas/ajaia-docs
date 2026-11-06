@@ -170,4 +170,12 @@ describe('createLiveSaver', () => {
     await vi.advanceTimersByTimeAsync(5000)
     expect(s.send).not.toHaveBeenCalled()
   })
+
+  it('says "Document is too large" when the encoded request would pass the body limit', async () => {
+    const s = setup()
+    s.type('x'.repeat(1_600_000)) // under 2 MB raw, but ~2.1 MB once base64-encoded
+    await s.saver.flush()
+    expect(s.send).not.toHaveBeenCalled()
+    expect(s.statuses.at(-1)).toEqual(['error', 'Document is too large'])
+  })
 })

@@ -1,5 +1,5 @@
 import * as Y from 'yjs'
-import { YDOC_MAX_BYTES } from './limits'
+import { SAVE_B64_MAX_CHARS } from './limits'
 import type { Result } from './types'
 import { toB64 } from './ydoc'
 
@@ -67,13 +67,14 @@ export function createLiveSaver(opts: {
     try {
       dirty = false
       const sv = Y.encodeStateVector(ydoc)
-      const update = Y.encodeStateAsUpdate(ydoc, confirmed)
+      const update = toB64(Y.encodeStateAsUpdate(ydoc, confirmed))
       let res: Result<{ version: number }>
-      if (update.length > YDOC_MAX_BYTES) {
-        res = { ok: false, error: 'invalid', message: TOO_BIG } // never reaches the request body limit
+      if (update.length > SAVE_B64_MAX_CHARS) {
+        // Checked on the encoded size: base64 is ~4/3 of raw, and the body limit sees that.
+        res = { ok: false, error: 'invalid', message: TOO_BIG }
       } else {
         try {
-          res = await send(toB64(update))
+          res = await send(update)
         } catch {
           res = { ok: false, error: 'invalid', message: NETWORK }
         }
