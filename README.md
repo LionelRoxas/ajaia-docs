@@ -3,7 +3,7 @@
 A small Google Docs-style editor: rich text, autosave, file import, sharing, and live co-editing with carets and presence.
 Next.js + TypeScript, Supabase (Postgres, Auth, Realtime), deployed on Vercel.
 
-**Live:** LIVE_URL_TBD
+**Live:** https://ajaia-docs-lac-psi.vercel.app
 
 ## Demo accounts
 

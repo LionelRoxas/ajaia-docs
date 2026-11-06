@@ -1,6 +1,6 @@
 # Submission
 
-**Live URL:** LIVE_URL_TBD
+**Live URL:** https://ajaia-docs-lac-psi.vercel.app
 **Video (3-5 min):** see `VIDEO_URL.txt` (VIDEO_URL_TBD)
 
 ## Demo credentials
