@@ -28,7 +28,7 @@ import Toolbar from './Toolbar'
 import SaveStatus from './SaveStatus'
 import SharePanel from './SharePanel'
 import Presence from './Presence'
-import DeleteDocumentButton from './DeleteDocumentButton'
+import MoreMenu from './MoreMenu'
 
 // Peer carets: color limited to our palette, name inserted as text.
 type CaretUser = { name?: unknown; color?: unknown }
@@ -266,7 +266,8 @@ export default function DocEditor({ id, ydoc: serverState, epoch: initialEpoch, 
           </div>
           {isOwner ? (
             <div className="flex shrink-0 items-center gap-1">
-              <DeleteDocumentButton
+              <SharePanel docId={id} currentEmail={user.email} onUnshared={() => void sessionRef.current?.live.rekey()} />
+              <MoreMenu
                 docId={id}
                 title={title}
                 onDeleted={() => {
@@ -274,7 +275,6 @@ export default function DocEditor({ id, ydoc: serverState, epoch: initialEpoch, 
                   router.push('/docs')
                 }}
               />
-              <SharePanel docId={id} currentEmail={user.email} onUnshared={() => void sessionRef.current?.live.rekey()} />
             </div>
           ) : (
             <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 text-xs text-muted">Shared by {ownerName}</span>
