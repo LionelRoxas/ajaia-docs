@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { memoryRepo } from '@/lib/repo.memory'
 import type { Repo } from '@/lib/repo'
 import type { DocRow, Profile } from '@/lib/types'
-import { getDocumentFor, listDocumentsFor, createDocument, normalizeTitle } from '@/lib/documents'
+import { getDocumentFor, listDocumentsFor, createDocument, deleteDocument, normalizeTitle } from '@/lib/documents'
 
 const D1 = '00000000-0000-4000-8000-000000000001'
 const MISSING = '00000000-0000-4000-8000-0000000000ff'
@@ -61,5 +61,28 @@ describe('malformed ids', () => {
   it('getDocumentFor returns not_found', async () => {
     const r = await getDocumentFor(memoryRepo(), 'abc', 'a')
     expect(r).toMatchObject({ ok: false, error: 'not_found' })
+  })
+})
+
+describe('deleteDocument', () => {
+  it('owner deletes: gone for owner and shared user, and from lists', async () => {
+    const r = await deleteDocument(repo, 'a', D1)
+    expect(r).toEqual({ ok: true, value: { epoch: 0 } })
+    expect(await getDocumentFor(repo, D1, 'a')).toMatchObject({ ok: false, error: 'not_found' })
+    expect(await getDocumentFor(repo, D1, 'b')).toMatchObject({ ok: false, error: 'not_found' })
+    expect((await listDocumentsFor(repo, 'a')).owned).toEqual([])
+    expect((await listDocumentsFor(repo, 'b')).shared).toEqual([])
+  })
+  it('shared user is forbidden and the doc survives', async () => {
+    expect(await deleteDocument(repo, 'b', D1)).toMatchObject({ ok: false, error: 'forbidden' })
+    expect(await getDocumentFor(repo, D1, 'a')).toMatchObject({ ok: true })
+    expect((await listDocumentsFor(repo, 'b')).shared).toHaveLength(1)
+  })
+  it('stranger gets not_found and the doc survives', async () => {
+    expect(await deleteDocument(repo, 'c', D1)).toMatchObject({ ok: false, error: 'not_found' })
+    expect(await getDocumentFor(repo, D1, 'a')).toMatchObject({ ok: true })
+  })
+  it('malformed id gets not_found', async () => {
+    expect(await deleteDocument(repo, 'a', 'abc')).toMatchObject({ ok: false, error: 'not_found' })
   })
 })

@@ -72,7 +72,7 @@ Then:
 | Email notifications on share | Demo inboxes are not real; needs a verified sending domain. Shared docs show under "Shared with me" instead. |
 | Password reset, OAuth, email verification | Not needed to show the core flow. |
 | Roles beyond owner / editor | One access level keeps the rules obvious. |
-| Delete documents, version history, comments, export | Stretch items. |
+| Version history, comments, export | Stretch items. |
 | Images and attachments in documents | Upload covers import. |
 
 More: [ARCHITECTURE.md](ARCHITECTURE.md) (design, known limitations), [AI_WORKFLOW.md](AI_WORKFLOW.md), [docs/REVIEW_LOG.md](docs/REVIEW_LOG.md), [SUBMISSION.md](SUBMISSION.md).

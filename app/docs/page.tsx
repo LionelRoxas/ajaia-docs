@@ -5,6 +5,7 @@ import { supabaseRepo } from '@/lib/repo'
 import { listDocumentsFor } from '@/lib/documents'
 import { relativeTime } from '@/lib/time'
 import NewDocumentButton from '@/components/NewDocumentButton'
+import OwnedRow from '@/components/OwnedRow'
 import UploadButton from '@/components/UploadButton'
 
 export default async function DocsPage() {
@@ -20,7 +21,7 @@ export default async function DocsPage() {
 
       <Section title="My documents" empty="No documents yet.">
         {owned.map((d) => (
-          <Row key={d.id} id={d.id} title={d.title} updatedAt={d.updated_at} />
+          <OwnedRow key={d.id} id={d.id} title={d.title} updatedAt={d.updated_at} />
         ))}
       </Section>
 
@@ -46,7 +47,7 @@ function Section({ title, empty, children }: { title: string; empty: string; chi
   )
 }
 
-function Row({ id, title, updatedAt, sharedBy }: { id: string; title: string; updatedAt: string; sharedBy?: string }) {
+function Row({ id, title, updatedAt, sharedBy }: { id: string; title: string; updatedAt: string; sharedBy: string }) {
   return (
     <li>
       <Link
@@ -54,7 +55,7 @@ function Row({ id, title, updatedAt, sharedBy }: { id: string; title: string; up
         className="flex items-baseline gap-4 px-4 py-3 hover:bg-canvas focus-visible:bg-canvas focus-visible:outline-offset-[-2px]"
       >
         <span className="min-w-0 flex-1 truncate font-serif text-[17px]">{title}</span>
-        {sharedBy && <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 text-xs text-muted">Shared by {sharedBy}</span>}
+        <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 text-xs text-muted">Shared by {sharedBy}</span>
         <time dateTime={updatedAt} className="shrink-0 text-xs text-muted tabular-nums">
           {relativeTime(updatedAt)}
         </time>

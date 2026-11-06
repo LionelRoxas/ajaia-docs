@@ -25,6 +25,6 @@ Full list of blocking findings and decisions: [docs/REVIEW_LOG.md](docs/REVIEW_L
 
 ## How correctness, UX and reliability were verified
 
-- **Correctness.** Test-first (red, then green). 107 unit tests: access rules, saves, import (including script stripping), Yjs merge and caps, epoch and revocation, redirect safety.
+- **Correctness.** Test-first (red, then green). 111 unit tests: access rules, saves, import (including script stripping), Yjs merge and caps, epoch and revocation, redirect safety.
 - **UX.** Live checks in two browsers: typing, carets, presence, share and unshare, upload, reload persistence.
 - **Reliability.** Tests for failed saves resending, an autosave timing gap, and reconnect/resync. SQL policy checks run as each user (owner, shared user, stranger, old epoch). Revocation was checked live from a separate tab.

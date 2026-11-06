@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import Collaboration from '@tiptap/extension-collaboration'
@@ -27,6 +28,7 @@ import Toolbar from './Toolbar'
 import SaveStatus from './SaveStatus'
 import SharePanel from './SharePanel'
 import Presence from './Presence'
+import MoreMenu from './MoreMenu'
 
 // Peer carets: color limited to our palette, name inserted as text.
 type CaretUser = { name?: unknown; color?: unknown }
@@ -61,6 +63,7 @@ type Props = {
 }
 
 export default function DocEditor({ id, ydoc: serverState, epoch: initialEpoch, title: initialTitle, isOwner, ownerName, user }: Props) {
+  const router = useRouter()
   const [status, setStatus] = useState<Status>('idle')
   const [message, setMessage] = useState<string>()
   const [stopped, setStopped] = useState(false)
@@ -76,8 +79,10 @@ export default function DocEditor({ id, ydoc: serverState, epoch: initialEpoch, 
   const titleSaving = useRef(false)
   const titleUnsaved = useRef(false) // typed but not yet blurred (so not saved); read on close
   const sessionRef = useRef<Session | null>(null)
+  const deleting = useRef(false) // the owner's own delete is in flight or done
 
   const report = (s: Status, m?: string) => {
+    if (deleting.current) return // our own delete cuts us off; don't flash "no access" before leaving
     if (s === 'error' && isStopMessage(m)) {
       // Nothing more will save: drop pending work now so beforeunload stays quiet and no request fires.
       sessionRef.current?.saver.stop()
@@ -262,7 +267,20 @@ export default function DocEditor({ id, ydoc: serverState, epoch: initialEpoch, 
             <SaveStatus status={status} message={message} />
           </div>
           {isOwner ? (
-            <SharePanel docId={id} currentEmail={user.email} onUnshared={() => void sessionRef.current?.live.rekey()} />
+            <div className="flex shrink-0 items-center gap-1">
+              <SharePanel docId={id} currentEmail={user.email} onUnshared={() => void sessionRef.current?.live.rekey()} />
+              <MoreMenu
+                docId={id}
+                title={title}
+                onDeletePending={(p) => {
+                  deleting.current = p
+                }}
+                onDeleted={() => {
+                  sessionRef.current?.saver.stop() // nothing left to save
+                  router.push('/docs')
+                }}
+              />
+            </div>
           ) : (
             <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 text-xs text-muted">Shared by {ownerName}</span>
           )}

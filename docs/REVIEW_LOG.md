@@ -67,6 +67,7 @@ How each change was checked before it was accepted, what the checks caught, and 
 - Chose a CRDT over Google's operational transform: Vercel cannot host the always-on server OT needs.
 - Added real auth on top of one-click demo accounts.
 - Deferred share-notification emails (demo inboxes aren't real; would need a verified sending domain) and built return-to-doc after sign-in instead.
+- Added owner-only delete after owner feedback.
 
 ## Final whole-branch review fixes
 

@@ -45,3 +45,12 @@ export async function createDocument(repo: Repo, userId: string, input: { title?
   if (contentTooBig(content)) return fail('invalid', 'Document is too large')
   return { ok: true, value: await repo.insertDocument(userId, title.value, content) }
 }
+
+/** Owner only. Returns the share epoch at delete time so the caller can tell peers on that topic. */
+export async function deleteDocument(repo: Repo, userId: string, id: string): Promise<Result<{ epoch: number }>> {
+  const a = await accessFor(repo, id, userId)
+  if (!a) return notFound()
+  if (a.role !== 'owner') return fail('forbidden', 'Only the owner can delete this document')
+  await repo.deleteDocument(id)
+  return { ok: true, value: { epoch: a.doc.share_epoch } }
+}

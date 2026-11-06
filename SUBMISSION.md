@@ -39,19 +39,19 @@ eslint.config.mjs  postcss.config.mjs
 - Share by email (owner only), unshare, "My documents" vs "Shared with me".
 - Live co-editing with named carets and presence; unsharing cuts a user off within seconds.
 - Real sign-in and sign-up, plus one-click demo accounts.
-- 107 automated tests.
+- Owner-only delete (peers on the doc are cut off within seconds).
+- 111 automated tests.
 
 ## Incomplete
 
 - Title is last-write-wins; presence names are not identity-bound.
 - Sign-up has no email verification; sharing reveals whether an account exists.
-- No delete, version history, roles, offline, or share emails.
+- No version history, roles, offline, or share emails.
 
 Details and fixes: [ARCHITECTURE.md](ARCHITECTURE.md#known-limitations).
 
 ## Next 2-4 hours
 
 1. Email on share via a verified sending domain.
-2. Delete documents.
-3. View-only role.
-4. Identity-bound presence.
+2. View-only role.
+3. Identity-bound presence.
