@@ -4,7 +4,17 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import DeleteDialog from './DeleteDialog'
 
 // Owner-only overflow menu after Share; room for more document actions later.
-export default function MoreMenu({ docId, title, onDeleted }: { docId: string; title: string; onDeleted: () => void }) {
+export default function MoreMenu({
+  docId,
+  title,
+  onDeleted,
+  onDeletePending,
+}: {
+  docId: string
+  title: string
+  onDeleted: () => void
+  onDeletePending?: (pending: boolean) => void
+}) {
   const [open, setOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const root = useRef<HTMLDivElement>(null)
@@ -20,14 +30,14 @@ export default function MoreMenu({ docId, title, onDeleted }: { docId: string; t
       setOpen(false)
       button.current?.focus()
     }
-    const onDown = (e: MouseEvent) => {
+    const onDown = (e: PointerEvent) => {
       if (!root.current?.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener('keydown', onKey)
-    document.addEventListener('mousedown', onDown)
+    document.addEventListener('pointerdown', onDown)
     return () => {
       document.removeEventListener('keydown', onKey)
-      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('pointerdown', onDown)
     }
   }, [open])
 
@@ -58,6 +68,12 @@ export default function MoreMenu({ docId, title, onDeleted }: { docId: string; t
         <div
           id={menuId}
           role="menu"
+          onKeyDown={(e) => {
+            if (e.key === 'Tab') setOpen(false) // focus moves on naturally
+          }}
+          onBlur={(e) => {
+            if (!root.current?.contains(e.relatedTarget as Node | null)) setOpen(false)
+          }}
           className="absolute right-0 top-full z-20 mt-2 w-44 rounded-lg border border-line bg-paper p-1 shadow-lg"
         >
           <button
@@ -79,6 +95,7 @@ export default function MoreMenu({ docId, title, onDeleted }: { docId: string; t
           docId={docId}
           title={title}
           onClose={closeConfirm}
+          onPendingChange={onDeletePending}
           onDeleted={() => {
             setConfirming(false)
             onDeleted()

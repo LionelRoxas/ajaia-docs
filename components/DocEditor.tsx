@@ -79,8 +79,10 @@ export default function DocEditor({ id, ydoc: serverState, epoch: initialEpoch, 
   const titleSaving = useRef(false)
   const titleUnsaved = useRef(false) // typed but not yet blurred (so not saved); read on close
   const sessionRef = useRef<Session | null>(null)
+  const deleting = useRef(false) // the owner's own delete is in flight or done
 
   const report = (s: Status, m?: string) => {
+    if (deleting.current) return // our own delete cuts us off; don't flash "no access" before leaving
     if (s === 'error' && isStopMessage(m)) {
       // Nothing more will save: drop pending work now so beforeunload stays quiet and no request fires.
       sessionRef.current?.saver.stop()
@@ -270,6 +272,9 @@ export default function DocEditor({ id, ydoc: serverState, epoch: initialEpoch, 
               <MoreMenu
                 docId={id}
                 title={title}
+                onDeletePending={(p) => {
+                  deleting.current = p
+                }}
                 onDeleted={() => {
                   sessionRef.current?.saver.stop() // nothing left to save
                   router.push('/docs')

@@ -33,11 +33,11 @@ export async function deleteDocumentAction(id: string): Promise<Result<null>> {
   if (!user) return { ok: false, error: 'unauthorized', message: 'Your session expired. Sign in again.' }
   const res = await deleteDocument(supabaseRepo(), user.id, id)
   if (!res.ok) return res
+  revalidatePath('/docs')
   try {
     await broadcastRekey(id, res.value.epoch)
   } catch (e) {
     console.error('rekey broadcast failed', e) // not fatal: peers also notice on their next save
   }
-  revalidatePath('/docs')
   return { ok: true, value: null }
 }

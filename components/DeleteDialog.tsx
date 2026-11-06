@@ -9,15 +9,19 @@ export default function DeleteDialog({
   title,
   onClose,
   onDeleted,
+  onPendingChange,
 }: {
   docId: string
   title: string
   onClose: () => void
   onDeleted: () => void
+  /** true when a delete starts, false if it failed (so the editor can ignore its own cut-off meanwhile). */
+  onPendingChange?: (pending: boolean) => void
 }) {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string>()
   const cancel = useRef<HTMLButtonElement>(null)
+  const confirmBtn = useRef<HTMLButtonElement>(null)
   const headingId = useId()
 
   useEffect(() => {
@@ -30,8 +34,10 @@ export default function DeleteDialog({
   }, [pending, onClose])
 
   const confirm = async () => {
+    if (pending) return // aria-disabled keeps focus, so block double submit here
     setPending(true)
     setError(undefined)
+    onPendingChange?.(true)
     try {
       const r = await deleteDocumentAction(docId)
       if (r.ok) {
@@ -42,6 +48,7 @@ export default function DeleteDialog({
     } catch {
       setError('Something went wrong. Try again.')
     }
+    onPendingChange?.(false)
     setPending(false)
   }
 
@@ -57,6 +64,18 @@ export default function DeleteDialog({
         aria-modal="true"
         aria-labelledby={headingId}
         className="w-[min(22rem,100%)] rounded-lg border border-line bg-paper p-4 shadow-lg"
+        onKeyDown={(e) => {
+          if (e.key !== 'Tab') return
+          // Keep focus inside the dialog: Cancel <-> Delete.
+          const [first, last] = [cancel.current, confirmBtn.current]
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault()
+            last?.focus()
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault()
+            first?.focus()
+          }
+        }}
       >
         <h2 id={headingId} className="text-sm font-semibold break-words">
           Delete “{title}”? This can’t be undone.
@@ -68,19 +87,22 @@ export default function DeleteDialog({
           <button
             ref={cancel}
             type="button"
-            onClick={onClose}
-            disabled={pending}
-            className="rounded-md px-3 py-1.5 text-sm text-muted hover:bg-canvas hover:text-ink disabled:opacity-50"
+            onClick={() => {
+              if (!pending) onClose()
+            }}
+            aria-disabled={pending}
+            className="rounded-md px-3 py-1.5 text-sm text-muted hover:bg-canvas hover:text-ink aria-disabled:opacity-50"
           >
             Cancel
           </button>
           <button
+            ref={confirmBtn}
             type="button"
             onClick={confirm}
-            disabled={pending}
-            className="rounded-md bg-danger px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+            aria-disabled={pending}
+            className="rounded-md bg-danger px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 aria-disabled:opacity-50"
           >
-            Delete
+            {pending ? 'Deleting…' : 'Delete'}
           </button>
         </div>
       </div>
